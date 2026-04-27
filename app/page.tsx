@@ -27,6 +27,7 @@ export default async function Home() {
           <nav aria-label="Primary navigation">
             <a href="#dashboard">Dashboard</a>
             <a href="/chart">Detailed chart</a>
+            <a href="/buffett">Buffett indicator</a>
             <a href="#notes">Notes</a>
             <a href="#about">About</a>
           </nav>

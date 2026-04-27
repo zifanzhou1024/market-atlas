@@ -97,6 +97,7 @@ export function Dashboard({
         <nav aria-label="Primary navigation">
           <a href="#dashboard">Dashboard</a>
           <a href="/chart">Detailed chart</a>
+          <a href="/buffett">Buffett indicator</a>
           <a href="#notes">Notes</a>
           <a href="#about">About</a>
         </nav>
@@ -187,6 +188,7 @@ export function Dashboard({
               />
             </label>
             <a className="detailLink" href="/chart">Open detailed chart</a>
+            <a className="detailLink" href="/buffett">Open Buffett indicator</a>
           </div>
         </div>
 

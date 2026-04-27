@@ -284,6 +284,21 @@ input {
   filter: none;
 }
 
+.buffettLine {
+  stroke: var(--blue);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 3px 5px rgb(66 103 198 / 15%));
+}
+
+.averageLine {
+  stroke: var(--panel-strong);
+  stroke-dasharray: 8 8;
+  stroke-width: 1.7;
+  opacity: 0.34;
+}
+
 .candleWick {
   stroke-width: 1.6;
 }
@@ -386,6 +401,10 @@ input {
 
 .modeSegment button {
   min-width: 78px;
+}
+
+.wideSegment button {
+  min-width: 134px;
 }
 
 .detailLink {

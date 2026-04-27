@@ -27,6 +27,7 @@ export default async function ChartPage() {
           <nav aria-label="Primary navigation">
             <a href="/">Dashboard</a>
             <a href="/chart">Detailed chart</a>
+            <a href="/buffett">Buffett indicator</a>
           </nav>
         </header>
         <section className="errorState" aria-labelledby="chart-error-title">

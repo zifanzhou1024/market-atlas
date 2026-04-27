@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Market Atlas",
-  description: "A personal market dashboard built around the Shiller PE ratio."
+  description: "A personal market dashboard built around CAPE and Buffett indicator valuation signals."
 };
 
 export const viewport: Viewport = {

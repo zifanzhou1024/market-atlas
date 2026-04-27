@@ -94,6 +94,7 @@ export function DetailedChart({
         <nav aria-label="Primary navigation">
           <a href="/">Dashboard</a>
           <a href="/chart">Detailed chart</a>
+          <a href="/buffett">Buffett indicator</a>
           <a href="/#about">Data sources</a>
         </nav>
       </header>
