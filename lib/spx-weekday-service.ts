@@ -3,16 +3,17 @@ import {
   initializeMarketDataSchema
 } from "./market-data/db";
 import {
+  getRefreshRunSummary,
   recordRefreshRun,
   upsertDataSource
 } from "./market-data/sources";
 import {
+  type SpxCacheSummary,
   getSpxCacheSummary,
   readSpxDailyPrices,
   upsertSpxDailyPrices
 } from "./market-data/spx-repository";
 import {
-  buildYahooSpxChartUrl,
   fetchYahooSpxChartJson,
   parseYahooSpxChartJson,
   YAHOO_SPX_CHART_BASE_URL
@@ -26,6 +27,14 @@ import {
 const SPX_SOURCE_KEY = "yahoo-spx-chart";
 const SPX_SOURCE_DISPLAY_NAME = "Yahoo Finance SPX chart";
 const SPX_SOURCE_PROVIDER = "Yahoo Finance";
+const DEFAULT_SPX_CACHE_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+
+export type LoadSpxWeekdayDataOptions = {
+  dbPath?: string;
+  fetcher?: () => Promise<unknown>;
+  now?: () => Date;
+  staleAfterMs?: number;
+};
 
 export type SpxWeekdayPayload = ReturnType<typeof buildSpxWeekdayDataset> & {
   source: {
@@ -38,7 +47,10 @@ export type SpxWeekdayPayload = ReturnType<typeof buildSpxWeekdayDataset> & {
   database: {
     latestDate: string | null;
     firstDate: string | null;
+    latestFetchedAt: string | null;
     rowCount: number;
+    lastSuccessfulRefreshAt: string | null;
+    lastAttemptedRefreshAt: string | null;
   };
   warning: string | null;
 };
@@ -46,8 +58,12 @@ export type SpxWeekdayPayload = ReturnType<typeof buildSpxWeekdayDataset> & {
 export async function loadSpxWeekdayData(query: {
   range: SpxRange;
   method: SpxReturnMethod;
-}): Promise<SpxWeekdayPayload> {
-  const db = createMarketDataDb();
+}, options: LoadSpxWeekdayDataOptions = {}): Promise<SpxWeekdayPayload> {
+  const db = createMarketDataDb(options.dbPath);
+  const now = options.now?.() ?? new Date();
+  const nowIso = now.toISOString();
+  const fetcher = options.fetcher ?? fetchYahooSpxChartJson;
+  const staleAfterMs = options.staleAfterMs ?? DEFAULT_SPX_CACHE_STALE_AFTER_MS;
 
   try {
     initializeMarketDataSchema(db);
@@ -59,36 +75,41 @@ export async function loadSpxWeekdayData(query: {
     });
 
     let warning: string | null = null;
+    const initialCache = getSpxCacheSummary(db);
+    const initialRefresh = getRefreshRunSummary(db, SPX_SOURCE_KEY);
 
-    try {
-      const payload = await fetchYahooSpxChartJson();
-      const rows = parseYahooSpxChartJson(payload);
+    if (shouldRefreshSpxCache(initialCache, initialRefresh.lastSuccessfulRefreshAt, now, staleAfterMs)) {
+      try {
+        const payload = await fetcher();
+        const rows = parseYahooSpxChartJson(payload);
 
-      if (rows.length === 0) {
-        throw new Error("Yahoo Finance SPX chart payload did not contain usable rows");
+        if (rows.length === 0) {
+          throw new Error("Yahoo Finance SPX chart payload did not contain usable rows");
+        }
+
+        const rowsChanged = upsertSpxDailyPrices(db, rows, SPX_SOURCE_KEY, nowIso);
+        recordRefreshRun(db, {
+          sourceKey: SPX_SOURCE_KEY,
+          status: "success",
+          rowsFetched: rows.length,
+          rowsChanged,
+          errorMessage: null
+        }, now);
+      } catch (error) {
+        warning = error instanceof Error ? error.message : "Unable to refresh SPX data";
+        recordRefreshRun(db, {
+          sourceKey: SPX_SOURCE_KEY,
+          status: "failure",
+          rowsFetched: 0,
+          rowsChanged: 0,
+          errorMessage: warning
+        }, now);
       }
-
-      const rowsChanged = upsertSpxDailyPrices(db, rows, SPX_SOURCE_KEY);
-      recordRefreshRun(db, {
-        sourceKey: SPX_SOURCE_KEY,
-        status: "success",
-        rowsFetched: rows.length,
-        rowsChanged,
-        errorMessage: null
-      });
-    } catch (error) {
-      warning = error instanceof Error ? error.message : "Unable to refresh SPX data";
-      recordRefreshRun(db, {
-        sourceKey: SPX_SOURCE_KEY,
-        status: "failure",
-        rowsFetched: 0,
-        rowsChanged: 0,
-        errorMessage: warning
-      });
     }
 
     const prices = readSpxDailyPrices(db);
     const cache = getSpxCacheSummary(db);
+    const refresh = getRefreshRunSummary(db, SPX_SOURCE_KEY);
 
     if (prices.length === 0) {
       throw new Error(warning ?? "No SPX data is available in the local cache");
@@ -101,16 +122,37 @@ export async function loadSpxWeekdayData(query: {
         name: SPX_SOURCE_DISPLAY_NAME,
         displayName: SPX_SOURCE_DISPLAY_NAME,
         provider: SPX_SOURCE_PROVIDER,
-        url: buildYahooSpxChartUrl()
+        url: YAHOO_SPX_CHART_BASE_URL
       },
       database: {
         latestDate: cache.latestDate,
         firstDate: cache.firstDate,
-        rowCount: cache.rowCount
+        latestFetchedAt: cache.latestFetchedAt,
+        rowCount: cache.rowCount,
+        lastSuccessfulRefreshAt: refresh.lastSuccessfulRefreshAt,
+        lastAttemptedRefreshAt: refresh.lastAttemptedRefreshAt
       },
       warning
     };
   } finally {
     db.close();
   }
+}
+
+function shouldRefreshSpxCache(
+  cache: SpxCacheSummary,
+  lastSuccessfulRefreshAt: string | null,
+  now: Date,
+  staleAfterMs: number
+): boolean {
+  if (cache.rowCount === 0 || !lastSuccessfulRefreshAt) {
+    return true;
+  }
+
+  const lastSuccessfulRefreshMs = Date.parse(lastSuccessfulRefreshAt);
+
+  return (
+    !Number.isFinite(lastSuccessfulRefreshMs) ||
+    now.getTime() - lastSuccessfulRefreshMs > staleAfterMs
+  );
 }

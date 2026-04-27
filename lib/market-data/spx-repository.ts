@@ -5,14 +5,15 @@ export type SpxCacheSummary = {
   rowCount: number;
   firstDate: string | null;
   latestDate: string | null;
+  latestFetchedAt: string | null;
 };
 
 export function upsertSpxDailyPrices(
   db: MarketDataDb,
   rows: SpxDailyPrice[],
-  sourceKey: string
+  sourceKey: string,
+  fetchedAt = new Date().toISOString()
 ): number {
-  const fetchedAt = new Date().toISOString();
   const statement = db.prepare(`
     insert into spx_daily_prices (date, open, high, low, close, volume, source_key, fetched_at)
     values (?, ?, ?, ?, ?, ?, ?, ?)
@@ -62,7 +63,8 @@ export function getSpxCacheSummary(db: MarketDataDb): SpxCacheSummary {
     select
       count(*) as rowCount,
       min(date) as firstDate,
-      max(date) as latestDate
+      max(date) as latestDate,
+      max(fetched_at) as latestFetchedAt
     from spx_daily_prices
   `).get() as SpxCacheSummary;
 }

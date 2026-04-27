@@ -15,6 +15,11 @@ export type RefreshRunInput = {
   errorMessage: string | null;
 };
 
+export type RefreshRunSummary = {
+  lastSuccessfulRefreshAt: string | null;
+  lastAttemptedRefreshAt: string | null;
+};
+
 export function upsertDataSource(db: MarketDataDb, source: DataSourceInput) {
   const now = new Date().toISOString();
 
@@ -30,8 +35,8 @@ export function upsertDataSource(db: MarketDataDb, source: DataSourceInput) {
   `).run(source.key, source.displayName, source.sourceUrl, source.provider, now, now);
 }
 
-export function recordRefreshRun(db: MarketDataDb, run: RefreshRunInput) {
-  const now = new Date().toISOString();
+export function recordRefreshRun(db: MarketDataDb, run: RefreshRunInput, now = new Date()) {
+  const timestamp = now.toISOString();
 
   db.prepare(`
     insert into refresh_runs
@@ -39,11 +44,21 @@ export function recordRefreshRun(db: MarketDataDb, run: RefreshRunInput) {
     values (?, ?, ?, ?, ?, ?, ?)
   `).run(
     run.sourceKey,
-    now,
-    now,
+    timestamp,
+    timestamp,
     run.status,
     run.rowsFetched,
     run.rowsChanged,
     run.errorMessage
   );
+}
+
+export function getRefreshRunSummary(db: MarketDataDb, sourceKey: string): RefreshRunSummary {
+  return db.prepare(`
+    select
+      max(case when status = 'success' then finished_at end) as lastSuccessfulRefreshAt,
+      max(finished_at) as lastAttemptedRefreshAt
+    from refresh_runs
+    where source_key = ?
+  `).get(sourceKey) as RefreshRunSummary;
 }
