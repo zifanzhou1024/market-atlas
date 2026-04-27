@@ -18,11 +18,25 @@ const sampleRows: SpxDailyPrice[] = [
 describe("filterSpxRange", () => {
   test("filters trailing one month by the latest trading date", () => {
     const rows: SpxDailyPrice[] = [
-      { date: "2023-12-01", open: 1, high: 1, low: 1, close: 1, volume: null },
+      { date: "2023-11-30", open: 1, high: 1, low: 1, close: 1, volume: null },
       { date: "2024-01-01", open: 2, high: 2, low: 2, close: 2, volume: null }
     ];
 
     expect(filterSpxRange(rows, "1m").map((row) => row.date)).toEqual(["2024-01-01"]);
+  });
+
+  test("keeps month-end rows at the trailing range cutoff", () => {
+    const rows: SpxDailyPrice[] = [
+      { date: "2024-02-29", open: 1, high: 1, low: 1, close: 1, volume: null },
+      { date: "2024-03-02", open: 2, high: 2, low: 2, close: 2, volume: null },
+      { date: "2024-03-31", open: 3, high: 3, low: 3, close: 3, volume: null }
+    ];
+
+    expect(filterSpxRange(rows, "1m").map((row) => row.date)).toEqual([
+      "2024-02-29",
+      "2024-03-02",
+      "2024-03-31"
+    ]);
   });
 });
 
@@ -105,7 +119,7 @@ describe("buildSpxWeekdayDataset", () => {
 
     expect(tuesday).toMatchObject({
       averageReturn: 2.42,
-      totalReturn: 4.9,
+      totalReturn: 4.89,
       sampleCount: 2,
       bestReturn: 2.97,
       bestDate: "2024-01-02",
@@ -150,5 +164,34 @@ describe("buildSpxWeekdayDataset", () => {
       bestReturn: 5,
       bestDate: "2024-01-02"
     });
+  });
+
+  test("keeps raw tiny returns for cumulative math before rounding public output", () => {
+    const dataset = buildSpxWeekdayDataset(
+      [
+        { date: "2024-01-01", open: 100000, high: 100004, low: 100000, close: 100004, volume: 0 },
+        { date: "2024-01-08", open: 100000, high: 100004, low: 100000, close: 100004, volume: 0 }
+      ],
+      {
+        range: "all",
+        method: "openClose"
+      }
+    );
+
+    const monday = dataset.weekdayStats.find((stat) => stat.weekday === "Monday");
+    const mondaySeries = dataset.cumulativeSeries.find((series) => series.weekday === "Monday");
+
+    expect(monday).toMatchObject({
+      averageReturn: 0,
+      totalReturn: 0.01,
+      winRate: 100,
+      sampleCount: 2,
+      bestReturn: 0,
+      worstReturn: 0
+    });
+    expect(mondaySeries?.points).toEqual([
+      { date: "2024-01-01", weekday: "Monday", returnPct: 0, cumulativeReturn: 0 },
+      { date: "2024-01-08", weekday: "Monday", returnPct: 0, cumulativeReturn: 0.01 }
+    ]);
   });
 });

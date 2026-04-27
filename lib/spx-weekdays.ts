@@ -36,6 +36,12 @@ export type SpxWeekdayDataset = {
   }>;
 };
 
+type RawSpxWeekdayReturn = {
+  date: string;
+  weekday: WeekdayName;
+  rawReturnPct: number;
+};
+
 const WEEKDAYS: WeekdayName[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 export function filterSpxRange(rows: SpxDailyPrice[], range: SpxRange): SpxDailyPrice[] {
@@ -48,7 +54,7 @@ export function filterSpxRange(rows: SpxDailyPrice[], range: SpxRange): SpxDaily
   const latestDate = sortedRows[sortedRows.length - 1].date;
   const cutoffDate = shiftUtcDate(latestDate, range);
 
-  return sortedRows.filter((row) => row.date > cutoffDate);
+  return sortedRows.filter((row) => row.date >= cutoffDate);
 }
 
 export function buildSpxWeekdayDataset(
@@ -64,8 +70,8 @@ export function buildSpxWeekdayDataset(
   const cumulativeSeries = WEEKDAYS.map((weekday) =>
     buildCumulativeSeries(weekday, groupedReturns.get(weekday) ?? [])
   );
-  const weekdayStats = cumulativeSeries.map((series) =>
-    summarizeWeekday(series.weekday, series.points)
+  const weekdayStats = WEEKDAYS.map((weekday) =>
+    summarizeWeekday(weekday, groupedReturns.get(weekday) ?? [])
   );
 
   return {
@@ -83,8 +89,10 @@ function sortSpxRows(rows: SpxDailyPrice[]): SpxDailyPrice[] {
   return [...rows].sort((left, right) => left.date.localeCompare(right.date));
 }
 
-function groupReturnsByWeekday(returns: SpxWeekdayReturn[]): Map<WeekdayName, SpxWeekdayReturn[]> {
-  const grouped = new Map<WeekdayName, SpxWeekdayReturn[]>(
+function groupReturnsByWeekday(
+  returns: RawSpxWeekdayReturn[]
+): Map<WeekdayName, RawSpxWeekdayReturn[]> {
+  const grouped = new Map<WeekdayName, RawSpxWeekdayReturn[]>(
     WEEKDAYS.map((weekday) => [weekday, []])
   );
 
@@ -97,17 +105,19 @@ function groupReturnsByWeekday(returns: SpxWeekdayReturn[]): Map<WeekdayName, Sp
 
 function buildCumulativeSeries(
   weekday: WeekdayName,
-  points: SpxWeekdayReturn[]
+  points: RawSpxWeekdayReturn[]
 ): { weekday: WeekdayName; points: SpxWeekdayReturn[] } {
   let cumulative = 1;
 
   return {
     weekday,
     points: points.map((point) => {
-      cumulative *= 1 + point.returnPct / 100;
+      cumulative *= 1 + point.rawReturnPct / 100;
 
       return {
-        ...point,
+        date: point.date,
+        weekday: point.weekday,
+        returnPct: roundNumber(point.rawReturnPct),
         cumulativeReturn: roundNumber((cumulative - 1) * 100)
       };
     })
@@ -118,8 +128,8 @@ function buildReturns(
   rows: SpxDailyPrice[],
   method: SpxReturnMethod,
   visibleDates: Set<string>
-): SpxWeekdayReturn[] {
-  return rows.reduce<SpxWeekdayReturn[]>((items, row, index) => {
+): RawSpxWeekdayReturn[] {
+  return rows.reduce<RawSpxWeekdayReturn[]>((items, row, index) => {
     const weekday = getWeekdayName(row.date);
 
     if (!weekday || !visibleDates.has(row.date)) {
@@ -135,15 +145,14 @@ function buildReturns(
     items.push({
       date: row.date,
       weekday,
-      returnPct: roundNumber(((row.close - base) / base) * 100),
-      cumulativeReturn: 0
+      rawReturnPct: ((row.close - base) / base) * 100
     });
 
     return items;
   }, []);
 }
 
-function summarizeWeekday(weekday: WeekdayName, points: SpxWeekdayReturn[]): SpxWeekdayStat {
+function summarizeWeekday(weekday: WeekdayName, points: RawSpxWeekdayReturn[]): SpxWeekdayStat {
   if (points.length === 0) {
     return {
       weekday,
@@ -159,27 +168,36 @@ function summarizeWeekday(weekday: WeekdayName, points: SpxWeekdayReturn[]): Spx
   }
 
   const best = points.reduce((currentBest, point) =>
-    point.returnPct > currentBest.returnPct ? point : currentBest
+    point.rawReturnPct > currentBest.rawReturnPct ? point : currentBest
   );
   const worst = points.reduce((currentWorst, point) =>
-    point.returnPct < currentWorst.returnPct ? point : currentWorst
+    point.rawReturnPct < currentWorst.rawReturnPct ? point : currentWorst
   );
 
   return {
     weekday,
     averageReturn: roundNumber(
-      points.reduce((sum, point) => sum + point.returnPct, 0) / points.length
+      points.reduce((sum, point) => sum + point.rawReturnPct, 0) / points.length
     ),
-    totalReturn: points[points.length - 1].cumulativeReturn,
+    totalReturn: roundNumber(calculateCumulativeReturn(points)),
     winRate: roundNumber(
-      (points.filter((point) => point.returnPct > 0).length / points.length) * 100
+      (points.filter((point) => point.rawReturnPct > 0).length / points.length) * 100
     ),
     sampleCount: points.length,
-    bestReturn: best.returnPct,
+    bestReturn: roundNumber(best.rawReturnPct),
     bestDate: best.date,
-    worstReturn: worst.returnPct,
+    worstReturn: roundNumber(worst.rawReturnPct),
     worstDate: worst.date
   };
+}
+
+function calculateCumulativeReturn(points: RawSpxWeekdayReturn[]): number {
+  const cumulative = points.reduce(
+    (product, point) => product * (1 + point.rawReturnPct / 100),
+    1
+  );
+
+  return (cumulative - 1) * 100;
 }
 
 function getWeekdayName(date: string): WeekdayName | null {
@@ -189,7 +207,7 @@ function getWeekdayName(date: string): WeekdayName | null {
 }
 
 function shiftUtcDate(date: string, range: Exclude<SpxRange, "all">): string {
-  const parsedDate = new Date(`${date}T00:00:00.000Z`);
+  const [year, month, day] = date.split("-").map(Number);
   const monthsByRange: Record<Exclude<SpxRange, "all">, number> = {
     "1m": 1,
     "3m": 3,
@@ -199,10 +217,16 @@ function shiftUtcDate(date: string, range: Exclude<SpxRange, "all">): string {
     "5y": 60,
     "10y": 120
   };
+  const targetMonthIndex = year * 12 + (month - 1) - monthsByRange[range];
+  const targetYear = Math.floor(targetMonthIndex / 12);
+  const targetMonth = (targetMonthIndex % 12) + 1;
+  const targetDay = Math.min(day, getDaysInUtcMonth(targetYear, targetMonth));
 
-  parsedDate.setUTCMonth(parsedDate.getUTCMonth() - monthsByRange[range]);
-
-  return parsedDate.toISOString().slice(0, 10);
+  return [
+    String(targetYear).padStart(4, "0"),
+    String(targetMonth).padStart(2, "0"),
+    String(targetDay).padStart(2, "0")
+  ].join("-");
 }
 
 function isPositiveNumber(value: unknown): value is number {
@@ -211,4 +235,8 @@ function isPositiveNumber(value: unknown): value is number {
 
 function roundNumber(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function getDaysInUtcMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
