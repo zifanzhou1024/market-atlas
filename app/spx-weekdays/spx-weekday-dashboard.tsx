@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SpxWeekdayPayload } from "../../lib/spx-weekday-service";
 import type {
   SpxRange,
@@ -389,6 +389,10 @@ function WeekdayCumulativeChart({
   leaderWeekday: WeekdayName;
 }) {
   const [activePoint, setActivePoint] = useState<ActiveCumulativePoint | null>(null);
+  useEffect(() => {
+    setActivePoint(null);
+  }, [series]);
+
   const width = 760;
   const height = 380;
   const padding = { top: 30, right: 28, bottom: 58, left: 62 };
