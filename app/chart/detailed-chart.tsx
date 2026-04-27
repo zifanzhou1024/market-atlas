@@ -16,6 +16,7 @@ import {
   ValuationChart,
   type ChartMode
 } from "../valuation-chart";
+import { withBasePath } from "../../lib/paths";
 
 type DetailedChartProps = {
   initialPoints: ShillerPoint[];
@@ -87,16 +88,16 @@ export function DetailedChart({
   return (
     <main className="shell chartShell">
       <header className="topbar">
-        <a className="brand" href="/">
+        <a className="brand" href={withBasePath("/")}>
           <span className="brandMark" aria-hidden="true" />
           Market Atlas
         </a>
         <nav aria-label="Primary navigation">
-          <a href="/">Dashboard</a>
-          <a href="/chart">Detailed chart</a>
-          <a href="/buffett">Buffett indicator</a>
-          <a href="/spx-weekdays">SPX weekdays</a>
-          <a href="/#about">Data sources</a>
+          <a href={withBasePath("/")}>Dashboard</a>
+          <a href={withBasePath("/chart")}>Detailed chart</a>
+          <a href={withBasePath("/buffett")}>Buffett indicator</a>
+          <a href={withBasePath("/spx-weekdays")}>SPX weekdays</a>
+          <a href={withBasePath("/#about")}>Data sources</a>
         </nav>
       </header>
 

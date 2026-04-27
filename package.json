@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:pages": "npm run generate:pages-data && node scripts/build-pages.mjs",
+    "generate:pages-data": "tsx scripts/generate-pages-data.mjs",
     "start": "next start",
     "test": "vitest run"
   },
@@ -22,6 +24,7 @@
     "@types/node": "25.6.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "tsx": "^4.21.0",
     "typescript": "6.0.3",
     "vitest": "4.1.5"
   }

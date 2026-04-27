@@ -16,6 +16,7 @@ import {
   ValuationChart,
   type ChartMode
 } from "./valuation-chart";
+import { withBasePath } from "../lib/paths";
 
 type DashboardProps = {
   initialPoints: ShillerPoint[];
@@ -90,15 +91,15 @@ export function Dashboard({
   return (
     <main className="shell">
       <header className="topbar">
-        <a className="brand" href="/">
+        <a className="brand" href={withBasePath("/")}>
           <span className="brandMark" aria-hidden="true" />
           Market Atlas
         </a>
         <nav aria-label="Primary navigation">
           <a href="#dashboard">Dashboard</a>
-          <a href="/chart">Detailed chart</a>
-          <a href="/buffett">Buffett indicator</a>
-          <a href="/spx-weekdays">SPX weekdays</a>
+          <a href={withBasePath("/chart")}>Detailed chart</a>
+          <a href={withBasePath("/buffett")}>Buffett indicator</a>
+          <a href={withBasePath("/spx-weekdays")}>SPX weekdays</a>
           <a href="#notes">Notes</a>
           <a href="#about">About</a>
         </nav>
@@ -188,9 +189,9 @@ export function Dashboard({
                 onInput={(event) => handleDateInput(event.currentTarget.value)}
               />
             </label>
-            <a className="detailLink" href="/chart">Open detailed chart</a>
-            <a className="detailLink" href="/buffett">Open Buffett indicator</a>
-            <a className="detailLink" href="/spx-weekdays">Open SPX weekdays</a>
+            <a className="detailLink" href={withBasePath("/chart")}>Open detailed chart</a>
+            <a className="detailLink" href={withBasePath("/buffett")}>Open Buffett indicator</a>
+            <a className="detailLink" href={withBasePath("/spx-weekdays")}>Open SPX weekdays</a>
           </div>
         </div>
 

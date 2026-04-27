@@ -9,6 +9,7 @@ import type {
   SpxWeekdayStat,
   WeekdayName
 } from "../../lib/spx-weekdays";
+import { isStaticExport, withBasePath } from "../../lib/paths";
 
 type SpxWeekdayDashboardProps = {
   initialDataset: SpxWeekdayPayload | null;
@@ -112,10 +113,9 @@ export function SpxWeekdayDashboard({
     setErrorMessage(null);
 
     try {
-      const response = await fetch(
-        `/api/spx-weekdays?range=${nextRange}&method=${nextMethod}`,
-        { cache: "no-store" }
-      );
+      const response = await fetch(getSpxWeekdayDataUrl(nextRange, nextMethod), {
+        cache: "no-store"
+      });
       const payload = (await response.json()) as SpxWeekdayPayload | { error?: string };
 
       if (!response.ok) {
@@ -156,16 +156,16 @@ export function SpxWeekdayDashboard({
   return (
     <main className="shell chartShell">
       <header className="topbar">
-        <a className="brand" href="/">
+        <a className="brand" href={withBasePath("/")}>
           <span className="brandMark" aria-hidden="true" />
           Market Atlas
         </a>
         <nav aria-label="Primary navigation">
-          <a href="/">Dashboard</a>
-          <a href="/chart">CAPE chart</a>
-          <a href="/buffett">Buffett indicator</a>
-          <a href="/spx-weekdays" aria-current="page">SPX weekdays</a>
-          <a href="/#about">Data sources</a>
+          <a href={withBasePath("/")}>Dashboard</a>
+          <a href={withBasePath("/chart")}>CAPE chart</a>
+          <a href={withBasePath("/buffett")}>Buffett indicator</a>
+          <a href={withBasePath("/spx-weekdays")} aria-current="page">SPX weekdays</a>
+          <a href={withBasePath("/#about")}>Data sources</a>
         </nav>
       </header>
 
@@ -266,11 +266,17 @@ export function SpxWeekdayDashboard({
           >
             {isLoading ? "Retrying" : "Retry default view"}
           </button>
-          <a href="/api/spx-weekdays?range=1y&method=openClose">Check the data endpoint</a>
+          <a href={getSpxWeekdayDataUrl("1y", "openClose")}>Check the data endpoint</a>
         </section>
       )}
     </main>
   );
+}
+
+function getSpxWeekdayDataUrl(range: SpxRange, method: SpxReturnMethod): string {
+  return isStaticExport
+    ? withBasePath(`/data/spx-weekdays/${range}-${method}.json`)
+    : withBasePath(`/api/spx-weekdays?range=${range}&method=${method}`);
 }
 
 function WeekdaySummaryChart({ stats }: { stats: SpxWeekdayStat[] }) {

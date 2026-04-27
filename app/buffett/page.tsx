@@ -1,11 +1,12 @@
-import { fetchBuffettData } from "../../lib/buffett";
+import { loadBuffettPageDataset } from "../../lib/pages-data";
+import { withBasePath } from "../../lib/paths";
 import { BuffettDashboard } from "./buffett-dashboard";
 
 export const revalidate = 21600;
 
 export default async function BuffettPage() {
   try {
-    const dataset = await fetchBuffettData();
+    const dataset = await loadBuffettPageDataset();
 
     return (
       <BuffettDashboard
@@ -23,15 +24,15 @@ export default async function BuffettPage() {
     return (
       <main className="shell">
         <header className="topbar">
-          <a className="brand" href="/">
+          <a className="brand" href={withBasePath("/")}>
             <span className="brandMark" aria-hidden="true" />
             Market Atlas
           </a>
           <nav aria-label="Primary navigation">
-            <a href="/">Dashboard</a>
-            <a href="/chart">CAPE chart</a>
-            <a href="/buffett">Buffett indicator</a>
-            <a href="/spx-weekdays">SPX weekdays</a>
+            <a href={withBasePath("/")}>Dashboard</a>
+            <a href={withBasePath("/chart")}>CAPE chart</a>
+            <a href={withBasePath("/buffett")}>Buffett indicator</a>
+            <a href={withBasePath("/spx-weekdays")}>SPX weekdays</a>
           </nav>
         </header>
         <section className="errorState" aria-labelledby="buffett-error-title">
@@ -42,7 +43,7 @@ export default async function BuffettPage() {
               ? error.message
               : "The public FRED data sources did not respond."}
           </p>
-          <a href="/api/buffett">Check the data endpoint</a>
+          <a href={withBasePath("/api/buffett")}>Check the data endpoint</a>
         </section>
       </main>
     );

@@ -1,19 +1,13 @@
 import { SpxWeekdayDashboard } from "./spx-weekday-dashboard";
-
-export const dynamic = "force-dynamic";
+import { loadSpxWeekdayPageDataset } from "../../lib/pages-data";
 
 export const metadata = {
   title: "SPX weekdays | Market Atlas"
 };
 
-async function fetchInitialDataset() {
-  const { loadSpxWeekdayData } = await import("../../lib/spx-weekday-service");
-  return loadSpxWeekdayData({ range: "1y", method: "openClose" });
-}
-
 export default async function SpxWeekdaysPage() {
   try {
-    const initialDataset = await fetchInitialDataset();
+    const initialDataset = await loadSpxWeekdayPageDataset();
 
     return <SpxWeekdayDashboard initialDataset={initialDataset} />;
   } catch (error) {

@@ -1,11 +1,12 @@
 import { Dashboard } from "./dashboard";
-import { fetchShillerData } from "../lib/shiller";
+import { loadShillerPageDataset } from "../lib/pages-data";
+import { withBasePath } from "../lib/paths";
 
 export const revalidate = 21600;
 
 export default async function Home() {
   try {
-    const dataset = await fetchShillerData();
+    const dataset = await loadShillerPageDataset();
 
     return (
       <Dashboard
@@ -20,15 +21,15 @@ export default async function Home() {
     return (
       <main className="shell">
         <header className="topbar">
-          <a className="brand" href="/">
+          <a className="brand" href={withBasePath("/")}>
             <span className="brandMark" aria-hidden="true" />
             Market Atlas
           </a>
           <nav aria-label="Primary navigation">
             <a href="#dashboard">Dashboard</a>
-            <a href="/chart">Detailed chart</a>
-            <a href="/buffett">Buffett indicator</a>
-            <a href="/spx-weekdays">SPX weekdays</a>
+            <a href={withBasePath("/chart")}>Detailed chart</a>
+            <a href={withBasePath("/buffett")}>Buffett indicator</a>
+            <a href={withBasePath("/spx-weekdays")}>SPX weekdays</a>
             <a href="#notes">Notes</a>
             <a href="#about">About</a>
           </nav>
@@ -41,7 +42,7 @@ export default async function Home() {
               ? error.message
               : "The public workbook did not respond."}
           </p>
-          <a href="/api/shiller">Check the data endpoint</a>
+          <a href={withBasePath("/api/shiller")}>Check the data endpoint</a>
         </section>
       </main>
     );
