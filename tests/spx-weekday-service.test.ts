@@ -194,7 +194,7 @@ describe("loadSpxWeekdayData cache freshness", () => {
 
     expect(yahooFetchMock).toHaveBeenCalledTimes(1);
     expect(firstPayload.warning).toBe("Yahoo unavailable");
-    expect(secondPayload.warning).toBeNull();
+    expect(secondPayload.warning).toBe("Yahoo unavailable");
     expect(secondPayload.database).toMatchObject({
       rowCount: 2,
       firstDate: "2024-01-01",
@@ -252,11 +252,12 @@ function insertRefreshRun(
   status: "success" | "failure",
   rowsFetched: number,
   rowsChanged: number,
-  finishedAt: string
+  finishedAt: string,
+  errorMessage: string | null = null
 ) {
   db.prepare(`
     insert into refresh_runs
       (source_key, started_at, finished_at, status, rows_fetched, rows_changed, error_message)
     values (?, ?, ?, ?, ?, ?, ?)
-  `).run(SPX_SOURCE_KEY, finishedAt, finishedAt, status, rowsFetched, rowsChanged, null);
+  `).run(SPX_SOURCE_KEY, finishedAt, finishedAt, status, rowsFetched, rowsChanged, errorMessage);
 }

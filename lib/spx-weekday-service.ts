@@ -123,9 +123,13 @@ export async function loadSpxWeekdayData(query: {
     const prices = readSpxDailyPrices(db);
     const cache = getSpxCacheSummary(db);
     const refresh = getRefreshRunSummary(db, SPX_SOURCE_KEY);
+    const latestRefreshWarning =
+      refresh.lastAttemptStatus === "failure" ? refresh.lastAttemptErrorMessage : null;
 
     if (prices.length === 0) {
-      throw new Error(warning ?? "No SPX data is available in the local cache");
+      throw new Error(
+        warning ?? latestRefreshWarning ?? "No SPX data is available in the local cache"
+      );
     }
 
     return {
@@ -145,7 +149,7 @@ export async function loadSpxWeekdayData(query: {
         lastSuccessfulRefreshAt: refresh.lastSuccessfulRefreshAt,
         lastAttemptedRefreshAt: refresh.lastAttemptedRefreshAt
       },
-      warning
+      warning: warning ?? latestRefreshWarning
     };
   } finally {
     db.close();

@@ -18,6 +18,8 @@ export type RefreshRunInput = {
 export type RefreshRunSummary = {
   lastSuccessfulRefreshAt: string | null;
   lastAttemptedRefreshAt: string | null;
+  lastAttemptStatus: "success" | "failure" | null;
+  lastAttemptErrorMessage: string | null;
 };
 
 export function upsertDataSource(db: MarketDataDb, source: DataSourceInput) {
@@ -54,11 +56,29 @@ export function recordRefreshRun(db: MarketDataDb, run: RefreshRunInput, now = n
 }
 
 export function getRefreshRunSummary(db: MarketDataDb, sourceKey: string): RefreshRunSummary {
-  return db.prepare(`
+  const timestamps = db.prepare(`
     select
       max(case when status = 'success' then finished_at end) as lastSuccessfulRefreshAt,
       max(finished_at) as lastAttemptedRefreshAt
     from refresh_runs
     where source_key = ?
   `).get(sourceKey) as RefreshRunSummary;
+  const latest = db.prepare(`
+    select status as lastAttemptStatus, error_message as lastAttemptErrorMessage
+    from refresh_runs
+    where source_key = ?
+    order by finished_at desc, id desc
+    limit 1
+  `).get(sourceKey) as
+    | {
+        lastAttemptStatus: "success" | "failure";
+        lastAttemptErrorMessage: string | null;
+      }
+    | undefined;
+
+  return {
+    ...timestamps,
+    lastAttemptStatus: latest?.lastAttemptStatus ?? null,
+    lastAttemptErrorMessage: latest?.lastAttemptErrorMessage ?? null
+  };
 }
