@@ -39,6 +39,19 @@ describe("filterSpxRange", () => {
       "2024-03-31"
     ]);
   });
+
+  test("filters YTD from the first calendar day of the latest trading year", () => {
+    const rows: SpxDailyPrice[] = [
+      { date: "2023-12-29", open: 1, high: 1, low: 1, close: 1, volume: null },
+      { date: "2024-01-02", open: 2, high: 2, low: 2, close: 2, volume: null },
+      { date: "2024-04-26", open: 3, high: 3, low: 3, close: 3, volume: null }
+    ];
+
+    expect(filterSpxRange(rows, "ytd").map((row) => row.date)).toEqual([
+      "2024-01-02",
+      "2024-04-26"
+    ]);
+  });
 });
 
 describe("normalizeSpxWeekdayQuery", () => {
@@ -50,6 +63,10 @@ describe("normalizeSpxWeekdayQuery", () => {
     expect(normalizeSpxWeekdayQuery({ range: "10y", method: "closeClose" })).toEqual({
       range: "10y",
       method: "closeClose"
+    });
+    expect(normalizeSpxWeekdayQuery({ range: "ytd", method: "openClose" })).toEqual({
+      range: "ytd",
+      method: "openClose"
     });
   });
 });

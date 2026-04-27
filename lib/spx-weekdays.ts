@@ -1,6 +1,6 @@
 import type { SpxDailyPrice } from "./spx-source";
 
-export type SpxRange = "1m" | "3m" | "6m" | "1y" | "2y" | "5y" | "10y" | "all";
+export type SpxRange = "1m" | "3m" | "6m" | "ytd" | "1y" | "2y" | "5y" | "10y" | "all";
 export type SpxReturnMethod = "openClose" | "closeClose";
 export type WeekdayName = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday";
 
@@ -43,7 +43,17 @@ type RawSpxWeekdayReturn = {
 };
 
 const WEEKDAYS: WeekdayName[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-const RANGE_VALUES = new Set<SpxRange>(["1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"]);
+const RANGE_VALUES = new Set<SpxRange>([
+  "1m",
+  "3m",
+  "6m",
+  "ytd",
+  "1y",
+  "2y",
+  "5y",
+  "10y",
+  "all"
+]);
 const METHOD_VALUES = new Set<SpxReturnMethod>(["openClose", "closeClose"]);
 
 export function normalizeSpxWeekdayQuery(input: {
@@ -66,7 +76,7 @@ export function filterSpxRange(rows: SpxDailyPrice[], range: SpxRange): SpxDaily
   }
 
   const latestDate = sortedRows[sortedRows.length - 1].date;
-  const cutoffDate = shiftUtcDate(latestDate, range);
+  const cutoffDate = range === "ytd" ? getYearStartDate(latestDate) : shiftUtcDate(latestDate, range);
 
   return sortedRows.filter((row) => row.date >= cutoffDate);
 }
@@ -220,9 +230,9 @@ function getWeekdayName(date: string): WeekdayName | null {
   return day >= 1 && day <= 5 ? WEEKDAYS[day - 1] : null;
 }
 
-function shiftUtcDate(date: string, range: Exclude<SpxRange, "all">): string {
+function shiftUtcDate(date: string, range: Exclude<SpxRange, "all" | "ytd">): string {
   const [year, month, day] = date.split("-").map(Number);
-  const monthsByRange: Record<Exclude<SpxRange, "all">, number> = {
+  const monthsByRange: Record<Exclude<SpxRange, "all" | "ytd">, number> = {
     "1m": 1,
     "3m": 3,
     "6m": 6,
@@ -241,6 +251,10 @@ function shiftUtcDate(date: string, range: Exclude<SpxRange, "all">): string {
     String(targetMonth).padStart(2, "0"),
     String(targetDay).padStart(2, "0")
   ].join("-");
+}
+
+function getYearStartDate(date: string): string {
+  return `${date.slice(0, 4)}-01-01`;
 }
 
 function isPositiveNumber(value: unknown): value is number {

@@ -42,6 +42,7 @@ const RANGE_OPTIONS: RangeOption[] = [
   { key: "1m", label: "1M" },
   { key: "3m", label: "3M" },
   { key: "6m", label: "6M" },
+  { key: "ytd", label: "YTD" },
   { key: "1y", label: "1Y" },
   { key: "2y", label: "2Y" },
   { key: "5y", label: "5Y" },
@@ -56,6 +57,7 @@ const RANGE_LABELS: Record<SpxRange, string> = {
   "1m": "1M",
   "3m": "3M",
   "6m": "6M",
+  ytd: "YTD",
   "1y": "1Y",
   "2y": "2Y",
   "5y": "5Y",
@@ -275,9 +277,9 @@ function WeekdaySummaryChart({ stats }: { stats: SpxWeekdayStat[] }) {
   const [activeWeekday, setActiveWeekday] = useState<WeekdayName | null>(null);
   const activeStat =
     stats.find((stat) => stat.weekday === activeWeekday) ?? getLeadingWeekday(stats);
-  const width = 560;
-  const height = 340;
-  const padding = { top: 30, right: 24, bottom: 58, left: 58 };
+  const width = 680;
+  const height = 420;
+  const padding = { top: 34, right: 28, bottom: 64, left: 64 };
   const values = stats.map((stat) => stat.totalReturn);
   const domain = niceDomain(Math.min(0, ...values), Math.max(0, ...values));
   const yTicks = buildValueTicks(domain.min, domain.max, 5);

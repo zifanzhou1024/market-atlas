@@ -751,7 +751,7 @@ input {
 
 .weekdayChartGrid {
   display: grid;
-  grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(420px, 1fr) minmax(0, 1.08fr);
   gap: 16px;
   align-items: stretch;
 }
@@ -768,6 +768,10 @@ input {
 .weekdaySummaryChart .chart,
 .weekdayCumulativeChart .chart {
   cursor: crosshair;
+}
+
+.weekdaySummaryChart .chart {
+  aspect-ratio: 680 / 420;
 }
 
 .weekdayChartHeader {
@@ -875,7 +879,6 @@ input {
 
 @media (max-width: 920px) {
   .intro,
-  .workbenchIntro,
   .dashboardGrid,
   .detailBand,
   .contentColumns {
@@ -891,10 +894,6 @@ input {
     grid-template-rows: none;
   }
 
-  .quoteStack {
-    align-items: flex-start;
-  }
-
   .workbenchHeader {
     align-items: flex-start;
     flex-direction: column;
@@ -907,6 +906,16 @@ input {
   .weekdayChartGrid,
   .weekdayStatGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .workbenchIntro {
+    grid-template-columns: 1fr;
+  }
+
+  .quoteStack {
+    align-items: flex-start;
   }
 }
 
