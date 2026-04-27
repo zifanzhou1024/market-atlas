@@ -173,6 +173,38 @@ describe("loadSpxWeekdayData cache freshness", () => {
     });
   });
 
+  test("does not immediately retry a failed refresh when cached rows exist", async () => {
+    seedCache({
+      rows: cachedRows,
+      successfulRefreshAt: STALE_SUCCESS_AT,
+      fetchedAt: CACHED_FETCHED_AT
+    });
+    yahooFetchMock.mockRejectedValueOnce(new Error("Yahoo unavailable"));
+
+    const firstPayload = await loadSpxWeekdayData(QUERY, {
+      dbPath: activeDbPath.current,
+      fetcher: yahooFetchMock,
+      now: () => NOW
+    });
+    const secondPayload = await loadSpxWeekdayData(QUERY, {
+      dbPath: activeDbPath.current,
+      fetcher: yahooFetchMock,
+      now: () => new Date("2026-04-27T15:05:00.000Z")
+    });
+
+    expect(yahooFetchMock).toHaveBeenCalledTimes(1);
+    expect(firstPayload.warning).toBe("Yahoo unavailable");
+    expect(secondPayload.warning).toBeNull();
+    expect(secondPayload.database).toMatchObject({
+      rowCount: 2,
+      firstDate: "2024-01-01",
+      latestDate: "2024-01-02",
+      latestFetchedAt: CACHED_FETCHED_AT,
+      lastSuccessfulRefreshAt: STALE_SUCCESS_AT,
+      lastAttemptedRefreshAt: NOW.toISOString()
+    });
+  });
+
   test("throws when refresh fails and no cached rows exist", async () => {
     yahooFetchMock.mockRejectedValue(new Error("Yahoo unavailable"));
 

@@ -28,12 +28,14 @@ const SPX_SOURCE_KEY = "yahoo-spx-chart";
 const SPX_SOURCE_DISPLAY_NAME = "Yahoo Finance SPX chart";
 const SPX_SOURCE_PROVIDER = "Yahoo Finance";
 const DEFAULT_SPX_CACHE_STALE_AFTER_MS = 6 * 60 * 60 * 1000;
+const DEFAULT_FAILED_REFRESH_COOLDOWN_MS = 15 * 60 * 1000;
 
 export type LoadSpxWeekdayDataOptions = {
   dbPath?: string;
   fetcher?: () => Promise<unknown>;
   now?: () => Date;
   staleAfterMs?: number;
+  failedRefreshCooldownMs?: number;
 };
 
 export type SpxWeekdayPayload = ReturnType<typeof buildSpxWeekdayDataset> & {
@@ -64,6 +66,8 @@ export async function loadSpxWeekdayData(query: {
   const nowIso = now.toISOString();
   const fetcher = options.fetcher ?? fetchYahooSpxChartJson;
   const staleAfterMs = options.staleAfterMs ?? DEFAULT_SPX_CACHE_STALE_AFTER_MS;
+  const failedRefreshCooldownMs =
+    options.failedRefreshCooldownMs ?? DEFAULT_FAILED_REFRESH_COOLDOWN_MS;
 
   try {
     initializeMarketDataSchema(db);
@@ -78,7 +82,16 @@ export async function loadSpxWeekdayData(query: {
     const initialCache = getSpxCacheSummary(db);
     const initialRefresh = getRefreshRunSummary(db, SPX_SOURCE_KEY);
 
-    if (shouldRefreshSpxCache(initialCache, initialRefresh.lastSuccessfulRefreshAt, now, staleAfterMs)) {
+    if (
+      shouldRefreshSpxCache(
+        initialCache,
+        initialRefresh.lastSuccessfulRefreshAt,
+        initialRefresh.lastAttemptedRefreshAt,
+        now,
+        staleAfterMs,
+        failedRefreshCooldownMs
+      )
+    ) {
       try {
         const payload = await fetcher();
         const rows = parseYahooSpxChartJson(payload);
@@ -142,10 +155,20 @@ export async function loadSpxWeekdayData(query: {
 function shouldRefreshSpxCache(
   cache: SpxCacheSummary,
   lastSuccessfulRefreshAt: string | null,
+  lastAttemptedRefreshAt: string | null,
   now: Date,
-  staleAfterMs: number
+  staleAfterMs: number,
+  failedRefreshCooldownMs: number
 ): boolean {
-  if (cache.rowCount === 0 || !lastSuccessfulRefreshAt) {
+  if (cache.rowCount === 0) {
+    return true;
+  }
+
+  if (isWithinRefreshWindow(lastAttemptedRefreshAt, now, failedRefreshCooldownMs)) {
+    return false;
+  }
+
+  if (!lastSuccessfulRefreshAt) {
     return true;
   }
 
@@ -155,4 +178,18 @@ function shouldRefreshSpxCache(
     !Number.isFinite(lastSuccessfulRefreshMs) ||
     now.getTime() - lastSuccessfulRefreshMs > staleAfterMs
   );
+}
+
+function isWithinRefreshWindow(
+  timestamp: string | null,
+  now: Date,
+  durationMs: number
+): boolean {
+  if (!timestamp) {
+    return false;
+  }
+
+  const timestampMs = Date.parse(timestamp);
+
+  return Number.isFinite(timestampMs) && now.getTime() - timestampMs <= durationMs;
 }
