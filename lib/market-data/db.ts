@@ -4,11 +4,12 @@ import { DatabaseSync } from "node:sqlite";
 
 export type MarketDataDb = DatabaseSync;
 
+export const SQLITE_BUSY_TIMEOUT_MS = 5000;
 export const DEFAULT_MARKET_DATA_DB_PATH = join(process.cwd(), "data", "market-atlas.sqlite");
 
 export function createMarketDataDb(dbPath = DEFAULT_MARKET_DATA_DB_PATH): MarketDataDb {
   mkdirSync(dirname(dbPath), { recursive: true });
-  return new DatabaseSync(dbPath);
+  return new DatabaseSync(dbPath, { timeout: SQLITE_BUSY_TIMEOUT_MS });
 }
 
 export function initializeMarketDataSchema(db: MarketDataDb) {
