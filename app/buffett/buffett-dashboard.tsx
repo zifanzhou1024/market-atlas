@@ -98,6 +98,7 @@ export function BuffettDashboard({
           <a href="/">Dashboard</a>
           <a href="/chart">CAPE chart</a>
           <a href="/buffett">Buffett indicator</a>
+          <a href="/spx-weekdays">SPX weekdays</a>
           <a href="/#about">Data sources</a>
         </nav>
       </header>

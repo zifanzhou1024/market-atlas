@@ -95,6 +95,7 @@ export function DetailedChart({
           <a href="/">Dashboard</a>
           <a href="/chart">Detailed chart</a>
           <a href="/buffett">Buffett indicator</a>
+          <a href="/spx-weekdays">SPX weekdays</a>
           <a href="/#about">Data sources</a>
         </nav>
       </header>

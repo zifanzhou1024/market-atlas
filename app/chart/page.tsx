@@ -28,6 +28,7 @@ export default async function ChartPage() {
             <a href="/">Dashboard</a>
             <a href="/chart">Detailed chart</a>
             <a href="/buffett">Buffett indicator</a>
+            <a href="/spx-weekdays">SPX weekdays</a>
           </nav>
         </header>
         <section className="errorState" aria-labelledby="chart-error-title">

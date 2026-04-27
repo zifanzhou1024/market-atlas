@@ -98,6 +98,7 @@ export function Dashboard({
           <a href="#dashboard">Dashboard</a>
           <a href="/chart">Detailed chart</a>
           <a href="/buffett">Buffett indicator</a>
+          <a href="/spx-weekdays">SPX weekdays</a>
           <a href="#notes">Notes</a>
           <a href="#about">About</a>
         </nav>
@@ -189,6 +190,7 @@ export function Dashboard({
             </label>
             <a className="detailLink" href="/chart">Open detailed chart</a>
             <a className="detailLink" href="/buffett">Open Buffett indicator</a>
+            <a className="detailLink" href="/spx-weekdays">Open SPX weekdays</a>
           </div>
         </div>
 

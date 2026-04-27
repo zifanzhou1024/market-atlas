@@ -28,6 +28,7 @@ export default async function Home() {
             <a href="#dashboard">Dashboard</a>
             <a href="/chart">Detailed chart</a>
             <a href="/buffett">Buffett indicator</a>
+            <a href="/spx-weekdays">SPX weekdays</a>
             <a href="#notes">Notes</a>
             <a href="#about">About</a>
           </nav>

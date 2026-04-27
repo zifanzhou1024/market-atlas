@@ -722,6 +722,157 @@ input {
   margin-top: 12px;
 }
 
+.weekdayRangeSegment {
+  max-width: 100%;
+  flex-wrap: wrap;
+  border-radius: 8px;
+}
+
+.weekdayRangeSegment button {
+  min-width: 54px;
+}
+
+.weekdayRangeSegment button:last-child {
+  min-width: 108px;
+}
+
+.weekdayMethodSegment button {
+  min-width: 132px;
+}
+
+.weekdayStatusMessage,
+.weekdayWarning {
+  margin: 4px 0 14px;
+  color: var(--red);
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.weekdayChartGrid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.86fr) minmax(0, 1.3fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.weekdaySummaryChart,
+.weekdayCumulativeChart {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgb(255 253 250 / 72%);
+}
+
+.weekdaySummaryChart .chart,
+.weekdayCumulativeChart .chart {
+  cursor: crosshair;
+}
+
+.weekdayChartHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.weekdayChartHeader h3 {
+  margin: 0;
+  font-size: clamp(1.16rem, 2vw, 1.55rem);
+  line-height: 1.1;
+}
+
+.weekdayReadout {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  min-width: 142px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.weekdayReadout strong {
+  color: var(--ink);
+}
+
+.weekdayLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.weekdayLegend span,
+.weekdayStat span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.weekdayLegend i,
+.weekdayStat i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.weekdayStatGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.weekdayStat {
+  min-height: 142px;
+}
+
+.weekdayStat small,
+.weekdayStat em {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.38;
+}
+
+.weekdayStat em {
+  color: #7b6140;
+}
+
+.retryButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  margin-right: 14px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--panel-strong);
+  color: white;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.retryButton:disabled,
+.segmented button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 @media (max-width: 920px) {
   .intro,
   .workbenchIntro,
@@ -751,6 +902,11 @@ input {
 
   .chartMetaGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .weekdayChartGrid,
+  .weekdayStatGrid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -852,5 +1008,36 @@ input {
 
   .chartMetaGrid {
     grid-template-columns: 1fr;
+  }
+
+  .weekdayRangeSegment,
+  .weekdayMethodSegment {
+    border-radius: 8px;
+  }
+
+  .weekdayRangeSegment button,
+  .weekdayRangeSegment button:last-child,
+  .weekdayMethodSegment button {
+    min-width: 0;
+  }
+
+  .weekdaySummaryChart,
+  .weekdayCumulativeChart {
+    padding: 12px;
+  }
+
+  .weekdayChartHeader {
+    flex-direction: column;
+  }
+
+  .weekdayReadout {
+    align-items: flex-start;
+    min-width: 0;
+    text-align: left;
+  }
+
+  .retryButton {
+    width: 100%;
+    margin: 0 0 12px;
   }
 }
