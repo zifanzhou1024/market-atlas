@@ -93,13 +93,11 @@ export function SpxWeekdayDashboard({
   initialError = null
 }: SpxWeekdayDashboardProps) {
   const [dataset, setDataset] = useState<SpxWeekdayPayload | null>(initialDataset);
-  const [range, setRange] = useState<SpxRange>(initialDataset?.range ?? "1y");
-  const [method, setMethod] = useState<SpxReturnMethod>(
-    initialDataset?.method ?? "openClose"
-  );
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(initialError);
   const requestIdRef = useRef(0);
+  const displayedRange = dataset?.range ?? "1y";
+  const displayedMethod = dataset?.method ?? "openClose";
   const leader = useMemo(
     () => (dataset ? getLeadingWeekday(dataset.weekdayStats) : null),
     [dataset]
@@ -129,8 +127,6 @@ export function SpxWeekdayDashboard({
       if (requestIdRef.current === requestId) {
         const nextDataset = payload as SpxWeekdayPayload;
         setDataset(nextDataset);
-        setRange(nextDataset.range);
-        setMethod(nextDataset.method);
       }
     } catch (error) {
       if (requestIdRef.current === requestId) {
@@ -148,13 +144,11 @@ export function SpxWeekdayDashboard({
   };
 
   const applyRange = (nextRange: SpxRange) => {
-    setRange(nextRange);
-    void loadDataset(nextRange, method);
+    void loadDataset(nextRange, displayedMethod);
   };
 
   const applyMethod = (nextMethod: SpxReturnMethod) => {
-    setMethod(nextMethod);
-    void loadDataset(range, nextMethod);
+    void loadDataset(displayedRange, nextMethod);
   };
 
   return (
@@ -208,7 +202,7 @@ export function SpxWeekdayDashboard({
                   <button
                     type="button"
                     key={option.key}
-                    aria-pressed={range === option.key}
+                    aria-pressed={displayedRange === option.key}
                     disabled={isLoading}
                     onClick={() => applyRange(option.key)}
                   >
@@ -221,7 +215,7 @@ export function SpxWeekdayDashboard({
                   <button
                     type="button"
                     key={option.key}
-                    aria-pressed={method === option.key}
+                    aria-pressed={displayedMethod === option.key}
                     disabled={isLoading}
                     onClick={() => applyMethod(option.key)}
                   >
@@ -266,7 +260,7 @@ export function SpxWeekdayDashboard({
             className="retryButton"
             type="button"
             disabled={isLoading}
-            onClick={() => void loadDataset(range, method)}
+            onClick={() => void loadDataset("1y", "openClose")}
           >
             {isLoading ? "Retrying" : "Retry default view"}
           </button>
@@ -356,6 +350,8 @@ function WeekdaySummaryChart({ stats }: { stats: SpxWeekdayStat[] }) {
           return (
             <g
               key={stat.weekday}
+              role="img"
+              aria-label={`${stat.weekday}: ${formatPercent(stat.totalReturn)} total return, ${formatPercent(stat.averageReturn)} average return, ${formatPercent(stat.winRate)} win rate, ${stat.sampleCount} observations`}
               onMouseEnter={() => setActiveWeekday(stat.weekday)}
               onFocus={() => setActiveWeekday(stat.weekday)}
               tabIndex={0}
