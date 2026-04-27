@@ -3,6 +3,7 @@ node_modules/
 .next/
 out/
 .env*.local
+tsconfig.tsbuildinfo
 .superpowers/
 .DS_Store
 .idea/

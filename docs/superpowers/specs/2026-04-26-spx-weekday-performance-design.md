@@ -44,10 +44,10 @@ The page uses the Research Dashboard structure selected during brainstorming:
 
 ## Data Source
 
-Use the free public Stooq daily CSV for SPX, targeting the `^SPX` symbol:
+Use the free public Yahoo Finance chart endpoint for SPX, targeting the `^GSPC` symbol:
 
 ```text
-https://stooq.com/q/d/l/?s=%5Espx&i=d
+https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC
 ```
 
 The ingestion layer should normalize:
@@ -59,7 +59,7 @@ The ingestion layer should normalize:
 - close
 - volume if present
 
-Only rows from `1993-01-01` onward are required. The implementation may fetch a full CSV and upsert all rows, but the repository interface should leave room for incremental refresh later.
+Only rows from `1993-01-01` onward are required. The implementation may fetch a full chart JSON payload and upsert all rows, but the repository interface should leave room for incremental refresh later.
 
 ## Database Design
 
@@ -129,7 +129,7 @@ Recommended modules:
 - `lib/market-data/db.ts`: database connection, schema initialization, and low-level SQL helpers.
 - `lib/market-data/sources.ts`: source registry and refresh metadata helpers.
 - `lib/market-data/spx-repository.ts`: SPX-specific read/write operations.
-- `lib/spx-source.ts`: Stooq fetch and CSV parse logic.
+- `lib/spx-source.ts`: Yahoo Finance chart fetch and JSON parse logic.
 - `lib/spx-weekdays.ts`: return calculations and chart dataset builders.
 
 The API route calls repository and analytics functions. React components receive already-shaped datasets.
@@ -213,7 +213,7 @@ The endpoint should ensure the local database is initialized and populated befor
 The app should distinguish:
 
 - source fetch failure
-- CSV parse failure
+- source payload parse failure
 - database initialization failure
 - empty or insufficient SPX rows
 
@@ -223,7 +223,7 @@ If a public source fetch fails after prior data exists, the page should still re
 
 Add focused Vitest coverage for:
 
-- Stooq CSV parsing.
+- Yahoo Finance chart JSON parsing.
 - SPX row normalization.
 - SQLite upsert behavior.
 - Cache freshness and latest-date detection.
@@ -256,7 +256,7 @@ Ownership: `lib/market-data/*`, `data/`, migration/init scripts, runtime/databas
 
 Ownership: `lib/spx-source.ts`, `lib/market-data/spx-repository.ts`, ingestion tests.
 
-- Fetch free Stooq `^SPX` daily CSV.
+- Fetch free Yahoo Finance `^GSPC` daily chart JSON.
 - Parse date, open, high, low, close, and volume if available.
 - Filter to dates from `1993-01-01`.
 - Upsert rows into SQLite.

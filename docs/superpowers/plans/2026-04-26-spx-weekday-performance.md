@@ -4,7 +4,7 @@
 
 **Goal:** Build a `/spx-weekdays` page backed by a local SQLite SPX OHLC cache, with weekday performance charts for open-to-close and previous-close-to-close methods.
 
-**Architecture:** Add a small market-data layer around `node:sqlite`, ingest free Stooq `^SPX` daily CSV data into `data/market-atlas.sqlite`, compute weekday analytics in pure TypeScript, expose the computed dataset through `/api/spx-weekdays`, and render a Research Dashboard-style page with summary and cumulative charts. The database metadata tables are intentionally shared so CAPE and Buffett can migrate to the same cache pattern later.
+**Architecture:** Add a small market-data layer around `node:sqlite`, ingest free Yahoo Finance `^GSPC` daily chart data into `data/market-atlas.sqlite`, compute weekday analytics in pure TypeScript, expose the computed dataset through `/api/spx-weekdays`, and render a Research Dashboard-style page with summary and cumulative charts. The database metadata tables are intentionally shared so CAPE and Buffett can migrate to the same cache pattern later.
 
 **Tech Stack:** Next.js App Router, React, TypeScript, Vitest, Node 24 `node:sqlite`, CSS in `app/globals.css`.
 
@@ -19,7 +19,7 @@ Implement the approved design in `docs/superpowers/specs/2026-04-26-spx-weekday-
 - Create `lib/market-data/db.ts`: opens SQLite, initializes schema, provides testable database helpers.
 - Create `lib/market-data/sources.ts`: registers source records and records refresh attempts.
 - Create `lib/market-data/spx-repository.ts`: reads and upserts SPX daily OHLC rows.
-- Create `lib/spx-source.ts`: fetches/parses free Stooq SPX CSV.
+- Create `lib/spx-source.ts`: fetches/parses free Yahoo Finance SPX chart JSON.
 - Create `lib/spx-weekdays.ts`: range filtering, return calculations, weekday grouping, and chart payload building.
 - Create `lib/spx-weekday-service.ts`: initializes the database, refreshes SPX data, and returns the complete API/page payload.
 - Create `app/api/spx-weekdays/route.ts`: ensures data exists, refreshes stale cache, returns analytics JSON.
@@ -28,7 +28,7 @@ Implement the approved design in `docs/superpowers/specs/2026-04-26-spx-weekday-
 - Modify `app/page.tsx`, `app/dashboard.tsx`, `app/chart/page.tsx`, `app/chart/detailed-chart.tsx`, `app/buffett/page.tsx`, `app/buffett/buffett-dashboard.tsx`: add navigation to SPX weekdays where each page currently lists primary routes.
 - Modify `app/globals.css`: styles for the new route and charts.
 - Modify `.gitignore`: ignore the generated SQLite database path if not already ignored.
-- Create `tests/spx-source.test.ts`: Stooq CSV parsing tests.
+- Create `tests/spx-source.test.ts`: Yahoo Finance chart JSON parsing tests.
 - Create `tests/spx-weekdays.test.ts`: analytics tests.
 - Create `tests/market-data.test.ts`: schema/upsert/cache metadata tests.
 
@@ -44,20 +44,39 @@ Create `tests/spx-source.test.ts`:
 
 ```ts
 import { describe, expect, test } from "vitest";
-import { parseStooqDailyCsv, STOOQ_SPX_DAILY_URL } from "../lib/spx-source";
+import {
+  buildYahooSpxChartUrl,
+  parseYahooSpxChartJson,
+  YAHOO_SPX_CHART_BASE_URL
+} from "../lib/spx-source";
 
-describe("parseStooqDailyCsv", () => {
-  test("parses SPX daily OHLC rows from Stooq CSV and filters before 1993", () => {
-    const csv = [
-      "Date,Open,High,Low,Close,Volume",
-      "1992-12-31,435.71,439.77,435.71,435.71,0",
-      "1993-01-04,435.70,437.32,434.48,435.38,0",
-      "1993-01-05,435.38,435.40,433.55,434.34,0"
-    ].join("\\n");
+describe("parseYahooSpxChartJson", () => {
+  test("parses SPX daily OHLC rows from Yahoo chart JSON and filters before 1993", () => {
+    const payload = {
+      chart: {
+        result: [
+          {
+            timestamp: [725760000, 726105600, 726192000],
+            indicators: {
+              quote: [
+                {
+                  open: [435.71, 435.7, 435.38],
+                  high: [439.77, 437.32, 435.4],
+                  low: [435.71, 434.48, 433.55],
+                  close: [435.71, 435.38, 434.34],
+                  volume: [0, 0, null]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    };
 
-    const rows = parseStooqDailyCsv(csv);
+    const rows = parseYahooSpxChartJson(payload);
 
-    expect(STOOQ_SPX_DAILY_URL).toContain("%5Espx");
+    expect(YAHOO_SPX_CHART_BASE_URL).toContain("%5EGSPC");
+    expect(buildYahooSpxChartUrl(new Date("2024-01-10T00:00:00.000Z"))).toContain("interval=1d");
     expect(rows).toEqual([
       {
         date: "1993-01-04",
@@ -73,20 +92,34 @@ describe("parseStooqDailyCsv", () => {
         high: 435.4,
         low: 433.55,
         close: 434.34,
-        volume: 0
+        volume: null
       }
     ]);
   });
 
-  test("skips malformed and non-finite rows", () => {
-    const csv = [
-      "Date,Open,High,Low,Close,Volume",
-      "1993-01-04,435.70,437.32,434.48,435.38,0",
-      "not-a-date,1,2,3,4,5",
-      "1993-01-06,436.00,437.00,435.00,N/D,0"
-    ].join("\\n");
+  test("skips missing and non-finite rows", () => {
+    const payload = {
+      chart: {
+        result: [
+          {
+            timestamp: [726105600, 726192000, 726278400],
+            indicators: {
+              quote: [
+                {
+                  open: [435.7, 436, Number.POSITIVE_INFINITY],
+                  high: [437.32, 437, 438],
+                  low: [434.48, 435, 436],
+                  close: [435.38, null, 437],
+                  volume: [0, 0, 0]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    };
 
-    expect(parseStooqDailyCsv(csv)).toHaveLength(1);
+    expect(parseYahooSpxChartJson(payload)).toHaveLength(1);
   });
 });
 ```
@@ -99,7 +132,7 @@ Run:
 npm test tests/spx-source.test.ts
 ```
 
-Expected: fail because `../lib/spx-source` does not exist.
+Expected: fail because the Yahoo parser exports do not exist.
 
 - [ ] **Step 3: Implement the parser**
 
@@ -115,81 +148,111 @@ export type SpxDailyPrice = {
   volume: number | null;
 };
 
-export const STOOQ_SPX_DAILY_URL = "https://stooq.com/q/d/l/?s=%5Espx&i=d";
+export const YAHOO_SPX_CHART_BASE_URL =
+  "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC";
 export const SPX_START_DATE = "1993-01-01";
 
-export async function fetchStooqSpxDailyCsv(): Promise<string> {
-  const response = await fetch(STOOQ_SPX_DAILY_URL, { cache: "no-store" });
-
-  if (!response.ok) {
-    throw new Error(`Stooq SPX source returned ${response.status}`);
-  }
-
-  return response.text();
+export function buildYahooSpxChartUrl(now = new Date()): string {
+  const period1 = Math.floor(Date.UTC(1993, 0, 1) / 1000);
+  const period2 = Math.floor(now.getTime() / 1000);
+  return `${YAHOO_SPX_CHART_BASE_URL}?period1=${period1}&period2=${period2}&interval=1d&events=history&includeAdjustedClose=true`;
 }
 
-export function parseStooqDailyCsv(csv: string): SpxDailyPrice[] {
-  const [headerLine, ...lines] = csv.trim().split(/\\r?\\n/);
+export async function fetchYahooSpxChartJson(): Promise<unknown> {
+  const response = await fetch(buildYahooSpxChartUrl(), { cache: "no-store" });
 
-  if (!headerLine) {
+  if (!response.ok) {
+    throw new Error(`Yahoo Finance SPX source returned ${response.status}`);
+  }
+
+  return response.json();
+}
+
+export function parseYahooSpxChartJson(input: unknown): SpxDailyPrice[] {
+  if (!input || typeof input !== "object") {
     return [];
   }
 
-  const headers = headerLine.split(",").map((header) => header.trim().toLowerCase());
-  const dateIndex = headers.indexOf("date");
-  const openIndex = headers.indexOf("open");
-  const highIndex = headers.indexOf("high");
-  const lowIndex = headers.indexOf("low");
-  const closeIndex = headers.indexOf("close");
-  const volumeIndex = headers.indexOf("volume");
+  const root = input as {
+    chart?: {
+      result?: Array<{
+        timestamp?: unknown;
+        indicators?: {
+          quote?: Array<{
+            open?: unknown;
+            high?: unknown;
+            low?: unknown;
+            close?: unknown;
+            volume?: unknown;
+          }>;
+        };
+      }>;
+    };
+  };
+  const result = root.chart?.result?.[0];
+  const quote = result?.indicators?.quote?.[0];
 
-  if ([dateIndex, openIndex, highIndex, lowIndex, closeIndex].some((index) => index === -1)) {
+  if (!Array.isArray(result?.timestamp) || !quote) {
     return [];
   }
 
-  return lines
-    .map((line) => {
-      const cells = line.split(",").map((cell) => cell.trim());
-      const date = cells[dateIndex];
-      const open = toFiniteNumber(cells[openIndex]);
-      const high = toFiniteNumber(cells[highIndex]);
-      const low = toFiniteNumber(cells[lowIndex]);
-      const close = toFiniteNumber(cells[closeIndex]);
-      const volume = volumeIndex === -1 ? null : toOptionalFiniteNumber(cells[volumeIndex]);
+  const opens = toNumberArray(quote.open);
+  const highs = toNumberArray(quote.high);
+  const lows = toNumberArray(quote.low);
+  const closes = toNumberArray(quote.close);
+  const volumes = toNullableNumberArray(quote.volume);
+
+  if (!opens || !highs || !lows || !closes) {
+    return [];
+  }
+
+  return result.timestamp
+    .map((timestamp, index) => {
+      if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) {
+        return null;
+      }
+
+      const date = new Date(timestamp * 1000).toISOString().slice(0, 10);
+      const open = opens[index];
+      const high = highs[index];
+      const low = lows[index];
+      const close = closes[index];
 
       if (
-        !/^\\d{4}-\\d{2}-\\d{2}$/.test(date) ||
         date < SPX_START_DATE ||
-        open === null ||
-        high === null ||
-        low === null ||
-        close === null
+        !isFiniteNumber(open) ||
+        !isFiniteNumber(high) ||
+        !isFiniteNumber(low) ||
+        !isFiniteNumber(close)
       ) {
         return null;
       }
 
-      return { date, open, high, low, close, volume };
+      return {
+        date,
+        open,
+        high,
+        low,
+        close,
+        volume: isFiniteNumber(volumes?.[index]) ? volumes[index] : null
+      };
     })
     .filter((row): row is SpxDailyPrice => row !== null)
     .sort((left, right) => left.date.localeCompare(right.date));
 }
 
-function toFiniteNumber(value: string | undefined): number | null {
-  if (!value || value.toUpperCase() === "N/D") {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+function toNumberArray(value: unknown): number[] | null {
+  return Array.isArray(value) ? value.map((item) => Number(item)) : null;
 }
 
-function toOptionalFiniteNumber(value: string | undefined): number | null {
-  if (!value || value.toUpperCase() === "N/D") {
-    return null;
-  }
+function toNullableNumberArray(value: unknown): Array<number | null> | null {
+  return Array.isArray(value)
+    ? value.map((item) => (item === null ? null : Number(item)))
+    : null;
+}
 
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 ```
 
@@ -256,13 +319,13 @@ describe("market data database", () => {
 
     initializeMarketDataSchema(db);
     upsertDataSource(db, {
-      key: "stooq-spx-daily",
-      displayName: "Stooq SPX daily",
-      provider: "Stooq",
-      sourceUrl: "https://stooq.com/q/d/l/?s=%5Espx&i=d"
+      key: "yahoo-spx-chart",
+      displayName: "Yahoo Finance SPX chart",
+      provider: "Yahoo Finance",
+      sourceUrl: "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
     });
     recordRefreshRun(db, {
-      sourceKey: "stooq-spx-daily",
+      sourceKey: "yahoo-spx-chart",
       status: "success",
       rowsFetched: 2,
       rowsChanged: 2,
@@ -273,10 +336,10 @@ describe("market data database", () => {
     const runs = db.prepare("select source_key, status, rows_fetched from refresh_runs").all();
 
     expect(sources).toEqual([
-      { source_key: "stooq-spx-daily", display_name: "Stooq SPX daily" }
+      { source_key: "yahoo-spx-chart", display_name: "Yahoo Finance SPX chart" }
     ]);
     expect(runs).toMatchObject([
-      { source_key: "stooq-spx-daily", status: "success", rows_fetched: 2 }
+      { source_key: "yahoo-spx-chart", status: "success", rows_fetched: 2 }
     ]);
   });
 
@@ -287,11 +350,11 @@ describe("market data database", () => {
     upsertSpxDailyPrices(db, [
       { date: "1993-01-05", open: 435.38, high: 435.4, low: 433.55, close: 434.34, volume: 0 },
       { date: "1993-01-04", open: 435.7, high: 437.32, low: 434.48, close: 435.38, volume: 0 }
-    ], "stooq-spx-daily");
+    ], "yahoo-spx-chart");
 
     upsertSpxDailyPrices(db, [
       { date: "1993-01-05", open: 436, high: 437, low: 435, close: 436.5, volume: 10 }
-    ], "stooq-spx-daily");
+    ], "yahoo-spx-chart");
 
     expect(readSpxDailyPrices(db)).toEqual([
       { date: "1993-01-04", open: 435.7, high: 437.32, low: 434.48, close: 435.38, volume: 0 },
@@ -913,9 +976,10 @@ import {
   upsertSpxDailyPrices
 } from "./market-data/spx-repository";
 import {
-  fetchStooqSpxDailyCsv,
-  parseStooqDailyCsv,
-  STOOQ_SPX_DAILY_URL
+  buildYahooSpxChartUrl,
+  fetchYahooSpxChartJson,
+  parseYahooSpxChartJson,
+  YAHOO_SPX_CHART_BASE_URL
 } from "./spx-source";
 import {
   buildSpxWeekdayDataset,
@@ -923,7 +987,7 @@ import {
   type SpxReturnMethod
 } from "./spx-weekdays";
 
-const SPX_SOURCE_KEY = "stooq-spx-daily";
+const SPX_SOURCE_KEY = "yahoo-spx-chart";
 
 export type SpxWeekdayPayload = ReturnType<typeof buildSpxWeekdayDataset> & {
   source: {
@@ -947,19 +1011,19 @@ export async function loadSpxWeekdayData(query: {
   initializeMarketDataSchema(db);
   upsertDataSource(db, {
     key: SPX_SOURCE_KEY,
-    displayName: "Stooq SPX daily",
-    provider: "Stooq",
-    sourceUrl: STOOQ_SPX_DAILY_URL
+    displayName: "Yahoo Finance SPX chart",
+    provider: "Yahoo Finance",
+    sourceUrl: YAHOO_SPX_CHART_BASE_URL
   });
 
   let warning: string | null = null;
 
   try {
-    const csv = await fetchStooqSpxDailyCsv();
-    const rows = parseStooqDailyCsv(csv);
+    const payload = await fetchYahooSpxChartJson();
+    const rows = parseYahooSpxChartJson(payload);
 
     if (rows.length === 0) {
-      throw new Error("Stooq SPX CSV did not contain usable rows");
+      throw new Error("Yahoo Finance SPX chart payload did not contain usable rows");
     }
 
     const rowsChanged = upsertSpxDailyPrices(db, rows, SPX_SOURCE_KEY);
@@ -992,8 +1056,8 @@ export async function loadSpxWeekdayData(query: {
     ...buildSpxWeekdayDataset(prices, query),
     source: {
       key: SPX_SOURCE_KEY,
-      name: "Stooq SPX daily",
-      url: STOOQ_SPX_DAILY_URL
+      name: "Yahoo Finance SPX chart",
+      url: buildYahooSpxChartUrl()
     },
     database: {
       latestDate: cache.latestDate,
@@ -1186,7 +1250,7 @@ Use the in-app browser to verify:
 - Range buttons update the page without console errors.
 - Method toggle switches between Open to close and Close to close.
 - Summary chart and cumulative chart are both visible.
-- Source/freshness note shows Stooq and local database metadata.
+- Source/freshness note shows Yahoo Finance and local database metadata.
 - Navigation to Dashboard, CAPE chart, and Buffett page still works.
 
 - [ ] **Step 5: Final review**
@@ -1194,7 +1258,7 @@ Use the in-app browser to verify:
 Review the diff against the design spec:
 
 - SPX uses SQLite-backed cached data.
-- Free public source is Stooq.
+- Free public source is Yahoo Finance chart JSON.
 - Both return methods are implemented.
 - Both chart types are implemented.
 - CAPE/Buffett are not rewritten now.
