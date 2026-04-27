@@ -43,6 +43,20 @@ type RawSpxWeekdayReturn = {
 };
 
 const WEEKDAYS: WeekdayName[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const RANGE_VALUES = new Set<SpxRange>(["1m", "3m", "6m", "1y", "2y", "5y", "10y", "all"]);
+const METHOD_VALUES = new Set<SpxReturnMethod>(["openClose", "closeClose"]);
+
+export function normalizeSpxWeekdayQuery(input: {
+  range?: string | null;
+  method?: string | null;
+}): { range: SpxRange; method: SpxReturnMethod } {
+  return {
+    range: RANGE_VALUES.has(input.range as SpxRange) ? (input.range as SpxRange) : "1y",
+    method: METHOD_VALUES.has(input.method as SpxReturnMethod)
+      ? (input.method as SpxReturnMethod)
+      : "openClose"
+  };
+}
 
 export function filterSpxRange(rows: SpxDailyPrice[], range: SpxRange): SpxDailyPrice[] {
   const sortedRows = sortSpxRows(rows);

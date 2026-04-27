@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   buildSpxWeekdayDataset,
   filterSpxRange,
+  normalizeSpxWeekdayQuery,
   type SpxReturnMethod
 } from "../lib/spx-weekdays";
 import type { SpxDailyPrice } from "../lib/spx-source";
@@ -37,6 +38,19 @@ describe("filterSpxRange", () => {
       "2024-03-02",
       "2024-03-31"
     ]);
+  });
+});
+
+describe("normalizeSpxWeekdayQuery", () => {
+  test("normalizes invalid SPX weekday query params to defaults", () => {
+    expect(normalizeSpxWeekdayQuery({ range: "bad", method: "bad" })).toEqual({
+      range: "1y",
+      method: "openClose"
+    });
+    expect(normalizeSpxWeekdayQuery({ range: "10y", method: "closeClose" })).toEqual({
+      range: "10y",
+      method: "closeClose"
+    });
   });
 });
 
