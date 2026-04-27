@@ -1,18 +1,39 @@
 import { describe, expect, test } from "vitest";
-import { parseStooqDailyCsv, STOOQ_SPX_DAILY_URL } from "../lib/spx-source";
+import {
+  buildYahooSpxChartUrl,
+  parseYahooSpxChartJson,
+  YAHOO_SPX_CHART_BASE_URL
+} from "../lib/spx-source";
 
-describe("parseStooqDailyCsv", () => {
-  test("parses SPX daily OHLC rows from Stooq CSV and filters before 1993", () => {
-    const csv = [
-      "Date,Open,High,Low,Close,Volume",
-      "1993-01-05,435.38,435.40,433.55,434.34,",
-      "1992-12-31,435.71,439.77,435.71,435.71,0",
-      "1993-01-04,435.70,437.32,434.48,435.38,0"
-    ].join("\n");
+describe("parseYahooSpxChartJson", () => {
+  test("parses SPX daily OHLC rows from Yahoo chart JSON and filters before 1993", () => {
+    const payload = {
+      chart: {
+        result: [
+          {
+            timestamp: [725760000, 726105600, 726192000],
+            indicators: {
+              quote: [
+                {
+                  open: [435.71, 435.7, 435.38],
+                  high: [439.77, 437.32, 435.4],
+                  low: [435.71, 434.48, 433.55],
+                  close: [435.71, 435.38, 434.34],
+                  volume: [0, 0, null]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    };
 
-    const rows = parseStooqDailyCsv(csv);
+    const rows = parseYahooSpxChartJson(payload);
 
-    expect(STOOQ_SPX_DAILY_URL).toContain("%5Espx");
+    expect(YAHOO_SPX_CHART_BASE_URL).toContain("%5EGSPC");
+    expect(buildYahooSpxChartUrl(new Date("2024-01-10T00:00:00.000Z"))).toContain(
+      "interval=1d"
+    );
     expect(rows).toEqual([
       {
         date: "1993-01-04",
@@ -33,15 +54,28 @@ describe("parseStooqDailyCsv", () => {
     ]);
   });
 
-  test("skips malformed and non-finite rows", () => {
-    const csv = [
-      "Date,Open,High,Low,Close,Volume",
-      "1993-01-04,435.70,437.32,434.48,435.38,0",
-      "not-a-date,1,2,3,4,5",
-      "1993-01-06,436.00,437.00,435.00,N/D,0",
-      "1993-01-07,Infinity,437.00,435.00,436.50,0"
-    ].join("\n");
+  test("skips missing and non-finite rows", () => {
+    const payload = {
+      chart: {
+        result: [
+          {
+            timestamp: [726105600, 726192000, 726278400],
+            indicators: {
+              quote: [
+                {
+                  open: [435.7, 436, Number.POSITIVE_INFINITY],
+                  high: [437.32, 437, 438],
+                  low: [434.48, 435, 436],
+                  close: [435.38, null, 437],
+                  volume: [0, 0, 0]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    };
 
-    expect(parseStooqDailyCsv(csv)).toHaveLength(1);
+    expect(parseYahooSpxChartJson(payload)).toHaveLength(1);
   });
 });
