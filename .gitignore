@@ -7,3 +7,5 @@ tsconfig.tsbuildinfo
 .superpowers/
 .DS_Store
 .idea/
+data/*.sqlite
+data/*.sqlite-*
