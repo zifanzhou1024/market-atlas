@@ -5,6 +5,11 @@ on:
     branches:
       - main
   workflow_dispatch:
+  schedule:
+    # GitHub cron uses UTC. These cover 5:00 PM America/New_York in
+    # daylight and standard time; the guard job skips the non-matching run.
+    - cron: "0 21 * * 1-5"
+    - cron: "0 22 * * 1-5"
 
 permissions:
   contents: read
@@ -16,7 +21,30 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  should-deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.schedule-check.outputs.run }}
+    steps:
+      - name: Check scheduled deploy time
+        id: schedule-check
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" != "schedule" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          local_hour="$(TZ=America/New_York date +%H)"
+          if [[ "$local_hour" == "17" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: should-deploy
+    if: needs.should-deploy.outputs.run == 'true'
     runs-on: ubuntu-latest
     env:
       GITHUB_PAGES: "true"
