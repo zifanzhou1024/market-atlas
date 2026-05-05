@@ -6,10 +6,15 @@ on:
       - main
   workflow_dispatch:
   schedule:
-    # GitHub cron uses UTC. These cover 7:05 PM America/Chicago in
-    # daylight and standard time; the guard job skips the non-matching run.
-    - cron: "5 0 * * 2-6"
-    - cron: "5 1 * * 2-6"
+    # GitHub cron uses UTC.
+    #
+    # 7:30 PM America/Chicago (CDT, UTC-5)  => 00:30 UTC next day
+    # 7:30 PM America/Chicago (CST, UTC-6)  => 01:30 UTC next day
+    #
+    # We schedule both and use a guard job to only proceed when the local
+    # America/Chicago time matches 19:30.
+    - cron: "30 0 * * 2-6" # Tue-Sat UTC => Mon-Fri local
+    - cron: "30 1 * * 2-6" # Tue-Sat UTC => Mon-Fri local
 
 permissions:
   contents: read
@@ -37,7 +42,7 @@ jobs:
 
           local_hour="$(TZ=America/Chicago date +%H)"
           local_minute="$(TZ=America/Chicago date +%M)"
-          if [[ "$local_hour" == "19" && "$local_minute" == "05" ]]; then
+          if [[ "$local_hour" == "19" && "$local_minute" == "30" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
