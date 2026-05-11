@@ -354,7 +354,7 @@ Files and current local helper names to delete:
 | `app/chart/detailed-chart.tsx` | `formatMonth`, `formatDay`, `formatYear`, `formatDateTime` (search for the function declarations) |
 | `app/buffett/buffett-dashboard.tsx` | `formatYear`, `formatDateTime` (lines ~529–549) — `formatQuarter` and `formatPointLabel` STAY (single-use) |
 | `app/valuation-chart.tsx` | `formatMonth`, `formatDay` (lines ~417–432) |
-| `app/spx-weekdays/spx-weekday-dashboard.tsx` | `formatDay`, `formatDateTime` (lines ~762–768) — keep `formatTickDate`, `formatPercent`, etc. (single-use) |
+| `app/spx-weekdays/spx-weekday-dashboard.tsx` | `formatDay`, `formatDateTime` (lines ~762–768) — keep `formatTickDate`, `formatPercent`, etc. (single-use). **Also delete** the now-unused `dateFormatter` and `dateTimeFormatter` module-level `Intl.DateTimeFormat` constants (lines ~79 and ~85) that the deleted helpers wrapped. |
 
 Use Edit tool per file, deleting old function definitions and adding the import.
 
@@ -1763,7 +1763,362 @@ EOF
 
 ## Chunk 3: Demolition and rewiring (Tasks 6–9)
 
-### Task 6: Demolish app/api/, lib/market-data/, lib/spx-weekday-service.ts, cache wrappers, rename hack
+### Task 6: Collapse data-loading abstractions (rewire consumers)
+
+**Files:**
+- Modify: `lib/pages-data.ts` (collapse to single read path)
+- Modify: `lib/paths.ts` (delete `isStaticExport`)
+- Modify: `next.config.mjs` (delete `NEXT_PUBLIC_STATIC_EXPORT`)
+- Modify: `app/spx-weekdays/spx-weekday-dashboard.tsx` (collapse fetch URL, drop `database`/`warning` reads, refactor `SourceNote`, fix the badge logic at lines 196-197, fix the error-state link at line 269)
+- Modify: `app/spx-weekdays/page.tsx` (pass manifest freshness as a prop)
+
+**Order matters.** This task must come **before** Task 7 (demolition). Task 7 deletes `lib/spx-weekday-service.ts` and `lib/market-data/`, which today are still imported by `lib/pages-data.ts` and `app/spx-weekdays/spx-weekday-dashboard.tsx`. Once this task rewires those consumers to use `lib/pages-data.ts`'s manifest helpers and the trimmed `SpxWeekdayPayload` shape, Task 7's `git rm` leaves no dangling imports and the build stays green between commits.
+
+`tests/spx-weekday-layout.test.ts` is a CSS-only test (reads `app/globals.css`); it does **not** use any `SpxWeekdayPayload` fixture and needs no edits.
+
+- [ ] **Step 1: Rewrite `lib/pages-data.ts`**
+
+Replace the entire contents with:
+
+```typescript
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { ManifestSchema, type Manifest, type SourceStatus } from "./schemas/manifest";
+
+const staticDataRoot = join(process.cwd(), "public", "data");
+
+export async function readStaticJson<T>(relativePath: string): Promise<T> {
+  const contents = await readFile(join(staticDataRoot, relativePath), "utf8");
+  return JSON.parse(contents) as T;
+}
+
+export async function readManifest(): Promise<Manifest> {
+  const text = await readFile(join(staticDataRoot, "manifest.json"), "utf8");
+  return ManifestSchema.parse(JSON.parse(text));
+}
+
+export async function loadShillerPageDataset() {
+  return readStaticJson<unknown>("shiller.json") as Promise<any>;
+}
+
+export async function loadBuffettPageDataset() {
+  return readStaticJson<unknown>("buffett.json") as Promise<any>;
+}
+
+export async function loadSpxWeekdayPageDataset() {
+  return readStaticJson<unknown>("spx-weekdays/1y-openClose.json") as Promise<any>;
+}
+
+export async function loadSpxWeekdayVariant(range: string, method: string) {
+  return readStaticJson<unknown>(`spx-weekdays/${range}-${method}.json`) as Promise<any>;
+}
+
+export function sourceFreshnessFor(manifest: Manifest, key: keyof Manifest["sources"]): SourceStatus {
+  return manifest.sources[key];
+}
+```
+
+The return types are `Promise<any>` for now — the dashboard pages narrow at call-sites. The `isGithubPagesBuild` switch and the `loadSpxWeekdayData` import from `lib/spx-weekday-service` are both gone.
+
+- [ ] **Step 2: Delete `isStaticExport` from `lib/paths.ts`**
+
+Replace `lib/paths.ts` contents with:
+
+```typescript
+export const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? "");
+
+export function withBasePath(path: string): string {
+  if (!path.startsWith("/") || path.startsWith("//")) {
+    return path;
+  }
+  return `${basePath}${path}` || path;
+}
+
+function normalizeBasePath(path: string): string {
+  if (!path || path === "/") {
+    return "";
+  }
+  return path.startsWith("/") ? path.replace(/\/$/, "") : `/${path.replace(/\/$/, "")}`;
+}
+```
+
+- [ ] **Step 3: Delete `NEXT_PUBLIC_STATIC_EXPORT` from `next.config.mjs`**
+
+Modify the `env` block inside the `isGithubPages` conditional:
+
+```javascript
+        env: {
+          NEXT_PUBLIC_BASE_PATH: githubPagesBasePath
+        }
+```
+
+(Drop the `NEXT_PUBLIC_STATIC_EXPORT: "true"` line.)
+
+- [ ] **Step 4: Trim `SpxWeekdayPayload` shape and add `SourceFreshness` type**
+
+In `app/spx-weekdays/spx-weekday-dashboard.tsx`, find the file's type imports from `lib/spx-weekday-service` (line 4). That module is being deleted. Replace with a local type definition at the top of the file:
+
+```typescript
+import type {
+  SpxRange,
+  SpxReturnMethod,
+  SpxWeekdayDataset,
+  SpxWeekdayReturn,
+  SpxWeekdayStat,
+  WeekdayName
+} from "../../lib/spx-weekdays";
+
+export type SpxWeekdayPayload = SpxWeekdayDataset & {
+  source: {
+    key: string;
+    name: string;
+    displayName: string;
+    provider: string;
+    url: string;
+  };
+};
+
+export type SourceFreshness = {
+  lastSuccessfulFetchAt: string | null;
+  lastAttemptedFetchAt: string;
+  latestDate: string | null;
+  rowCount: number;
+  status: "ok" | "stale" | "failed";
+  errorMessage: string | null;
+};
+```
+
+Verify `SpxWeekdayDataset` is exported from `lib/spx-weekdays.ts`:
+
+```bash
+grep "export type SpxWeekdayDataset" lib/spx-weekdays.ts
+```
+
+Expected: one match. (If not, add `export` to the existing `type SpxWeekdayDataset = ...` declaration.)
+
+- [ ] **Step 5: Update the workbench panel header badge AND `SourceNote`**
+
+In `app/spx-weekdays/spx-weekday-dashboard.tsx`, find the badge near the top of the rendered tree (~lines 196-197):
+
+```typescript
+<span className={`statusBadge ${dataset.warning || errorMessage ? "amber" : "green"}`}>
+  {isLoading ? "Updating" : dataset.warning || errorMessage ? "Needs review" : "Fresh view"}
+</span>
+```
+
+Replace with:
+
+```typescript
+<span className={`statusBadge ${(freshness && freshness.status !== "ok") || errorMessage ? "amber" : "green"}`}>
+  {isLoading
+    ? "Updating"
+    : freshness && freshness.status !== "ok"
+      ? "Source stale"
+      : errorMessage
+        ? "Needs review"
+        : "Fresh view"}
+</span>
+```
+
+Then find the `SourceNote` function (later in the file). Currently:
+
+```typescript
+function SourceNote({ dataset, fetchError }: { dataset: SpxWeekdayPayload; fetchError: string | null }) {
+  return (
+    <section className="sourceNote panel">
+      <p className="eyebrow">Source freshness</p>
+      <p>
+        Local cache covers {dataset.database.firstDate ...} ...
+      </p>
+      <p className="sourceLine">
+        Source fetched from <a href={dataset.source.url}>{dataset.source.displayName}</a>
+        {dataset.database.latestFetchedAt ? `; latest row fetched ${formatDateTime(dataset.database.latestFetchedAt)}` : ""}
+        {dataset.database.lastSuccessfulRefreshAt ? `; last refresh ${formatDateTime(dataset.database.lastSuccessfulRefreshAt)}` : ""}.
+      </p>
+      {dataset.warning ? ... : null}
+      {fetchError ? ... : null}
+    </section>
+  );
+}
+```
+
+Replace with:
+
+```typescript
+function SourceNote({
+  dataset,
+  freshness,
+  fetchError
+}: {
+  dataset: SpxWeekdayPayload;
+  freshness: SourceFreshness;
+  fetchError: string | null;
+}) {
+  return (
+    <section className="sourceNote panel">
+      <p className="eyebrow">Source freshness</p>
+      <p>
+        Showing data through {freshness.latestDate ? formatDay(freshness.latestDate) : "n/a"}{" "}
+        ({freshness.rowCount.toLocaleString()} daily rows).
+      </p>
+      <p className="sourceLine">
+        Source: <a href={dataset.source.url}>{dataset.source.displayName}</a>
+        {freshness.lastSuccessfulFetchAt
+          ? `; last successful fetch ${formatDateTime(freshness.lastSuccessfulFetchAt)}`
+          : ""}
+        .
+      </p>
+      {freshness.status !== "ok" && freshness.errorMessage ? (
+        <p className="weekdayWarning">Source warning: {freshness.errorMessage}</p>
+      ) : null}
+      {fetchError ? (
+        <p className="weekdayWarning">Update failed: {fetchError}</p>
+      ) : null}
+    </section>
+  );
+}
+```
+
+After these two updates, search the file once more for any remaining `dataset.database` or `dataset.warning` reference and remove or replace.
+
+- [ ] **Step 6: Collapse `getSpxWeekdayDataUrl` and fix the error-state link**
+
+Find:
+
+```typescript
+function getSpxWeekdayDataUrl(range: SpxRange, method: SpxReturnMethod): string {
+  return isStaticExport
+    ? withBasePath(`/data/spx-weekdays/${range}-${method}.json`)
+    : withBasePath(`/api/spx-weekdays?range=${range}&method=${method}`);
+}
+```
+
+Replace with:
+
+```typescript
+function getSpxWeekdayDataUrl(range: SpxRange, method: SpxReturnMethod): string {
+  return withBasePath(`/data/spx-weekdays/${range}-${method}.json`);
+}
+```
+
+Remove the `isStaticExport` import at the top of the file (it's no longer exported from `lib/paths.ts`).
+
+Then find the error-state link near the bottom of the dashboard (~line 269):
+
+```tsx
+<a href={getSpxWeekdayDataUrl("1y", "openClose")}>Check the data endpoint</a>
+```
+
+Replace with:
+
+```tsx
+<a href={withBasePath("/data")}>Check data status</a>
+```
+
+This aligns with the spec's error-state policy (link to `/data`, not a raw JSON file).
+
+- [ ] **Step 7: Update `app/spx-weekdays/page.tsx`**
+
+Replace the file with:
+
+```tsx
+import { SpxWeekdayDashboard, type SourceFreshness, type SpxWeekdayPayload } from "./spx-weekday-dashboard";
+import { loadSpxWeekdayPageDataset, readManifest } from "../../lib/pages-data";
+
+export const metadata = {
+  title: "SPX weekdays | Market Atlas"
+};
+
+export default async function SpxWeekdaysPage() {
+  try {
+    const [initialDataset, manifest] = await Promise.all([
+      loadSpxWeekdayPageDataset() as Promise<SpxWeekdayPayload>,
+      readManifest()
+    ]);
+    const freshness: SourceFreshness = manifest.sources.spxWeekdays;
+
+    return <SpxWeekdayDashboard initialDataset={initialDataset} freshness={freshness} />;
+  } catch (error) {
+    return (
+      <SpxWeekdayDashboard
+        initialDataset={null}
+        freshness={null}
+        initialError={
+          error instanceof Error
+            ? error.message
+            : "Unable to load SPX weekday performance data"
+        }
+      />
+    );
+  }
+}
+```
+
+- [ ] **Step 8: Update `SpxWeekdayDashboardProps` and pass freshness through**
+
+In `app/spx-weekdays/spx-weekday-dashboard.tsx`, update the props type:
+
+```typescript
+type SpxWeekdayDashboardProps = {
+  initialDataset: SpxWeekdayPayload | null;
+  freshness: SourceFreshness | null;
+  initialError?: string | null;
+};
+```
+
+Destructure `freshness` from props at the top of the component. Pass `freshness` to `<SourceNote>`. The `SourceNote` is only rendered when `dataset` is truthy; when `freshness` is null (error path), it's never reached.
+
+- [ ] **Step 9: Verify no stale imports or field reads remain**
+
+```bash
+grep -rn "isStaticExport\|spx-weekday-service\|dataset\.database\|dataset\.warning" app/ lib/ 2>/dev/null
+```
+
+Expected: no matches (the only remaining `spx-weekday-service` reference should be the about-to-be-deleted `lib/spx-weekday-service.ts` file itself, which the `lib/` portion of the grep won't match because — wait, it will. So the only legal match is `lib/spx-weekday-service.ts` itself).
+
+Refined version:
+
+```bash
+grep -rn "isStaticExport\|dataset\.database\|dataset\.warning" app/ lib/ 2>/dev/null
+grep -rn "spx-weekday-service" app/ 2>/dev/null
+```
+
+Expected: both empty.
+
+- [ ] **Step 10: Verify tests + build**
+
+```bash
+npm test
+npm run build
+```
+
+Expected: all tests pass; build succeeds. If a typecheck error references `database`, `warning`, or `isStaticExport`, fix the remaining reference and re-run.
+
+- [ ] **Step 11: Commit**
+
+```bash
+git add lib/pages-data.ts lib/paths.ts next.config.mjs \
+        app/spx-weekdays/page.tsx app/spx-weekdays/spx-weekday-dashboard.tsx
+git commit -m "$(cat <<'EOF'
+Collapse data-loading abstractions to single static read path
+
+- lib/pages-data.ts reduces to readStaticJson + readManifest;
+  isGithubPagesBuild branch deleted
+- lib/paths.ts drops isStaticExport (no consumer remaining)
+- next.config.mjs drops NEXT_PUBLIC_STATIC_EXPORT env export
+- SpxWeekdayPayload loses database + warning fields; dashboard
+  takes freshness as a prop from the server page that reads the
+  manifest at build time
+- getSpxWeekdayDataUrl collapses to /data/spx-weekdays/* only
+- Workbench badge logic and error-state link refactored to use
+  freshness/errorMessage instead of dataset.warning
+EOF
+)"
+```
+
+---
+
+### Task 7: Demolish app/api/, lib/market-data/, lib/spx-weekday-service.ts, cache wrappers, rename hack
 
 **Files:**
 - Delete: `app/api/shiller/route.ts`, `app/api/buffett/route.ts`, `app/api/spx-weekdays/route.ts`, `app/api/` (directory)
@@ -1775,24 +2130,21 @@ EOF
 - Modify: `lib/buffett.ts` (remove cache wrapper)
 - Modify: `next-env.d.ts` (reset path drift if still present)
 
-After Task 4 the orchestrator is the only consumer; nothing imports the legacy code. This task removes it.
+After Task 6 rewired all consumers, nothing imports the legacy code. This task removes it.
 
-- [ ] **Step 1: Confirm no production code imports the targets**
-
-Run:
+- [ ] **Step 1: Verify no consumers remain (Task 6 should have cleared them)**
 
 ```bash
-grep -rn "lib/spx-weekday-service" app/ lib/ scripts/ tests/ 2>/dev/null | grep -v "^tests/spx-weekday-service" | grep -v "^tests/spx-weekday-layout"
-grep -rn "lib/market-data" app/ lib/ scripts/ tests/ 2>/dev/null | grep -v "^tests/market-data"
-grep -rn "app/api" app/ lib/ scripts/ tests/ 2>/dev/null
+grep -rn "lib/spx-weekday-service" app/ lib/ scripts/ tests/ 2>/dev/null \
+  | grep -v "^lib/spx-weekday-service.ts"
+grep -rn "lib/market-data" app/ lib/ scripts/ tests/ 2>/dev/null \
+  | grep -v "^lib/market-data/\|^lib/spx-weekday-service.ts\|^tests/market-data.test.ts"
+grep -rn '"\.\./\.\./api\|"\.\./api' app/ lib/ scripts/ tests/ 2>/dev/null
 ```
 
-Expected:
-- First grep: `tests/spx-weekday-layout.test.ts` (still needs cleanup in Task 7).
-- Second grep: only `lib/spx-weekday-service.ts` itself.
-- Third grep: only the routes themselves.
+Expected: all three return **empty**. The only references to the about-to-be-deleted modules should be inside the files being deleted themselves.
 
-If you see any other matches, stop and investigate — there's a leftover dependency.
+If any grep returns content, **stop**. Task 6 missed a consumer — go back and fix Task 6 before continuing.
 
 - [ ] **Step 2: Delete the SQLite layer + service + their tests**
 
@@ -1922,7 +2274,7 @@ The unified-static model has no consumer for any of this:
 - app/api/* routes were stripped from production by the rename
   hack in scripts/build-pages.mjs and never served from Pages
 - lib/market-data/* and lib/spx-weekday-service.ts existed only
-  to back the API routes
+  to back the API routes (consumers rewired in the prior commit)
 - The 6h in-memory caches in lib/shiller.ts and lib/buffett.ts
   hold no state under one-fetch-per-build
 - scripts/build-pages.mjs needed the rename hack to keep API
@@ -1932,330 +2284,6 @@ The unified-static model has no consumer for any of this:
 Also restores next-env.d.ts to the canonical routes.d.ts path.
 
 Tests for deleted modules are removed.
-EOF
-)"
-```
-
----
-
-### Task 7: Collapse data-loading abstractions
-
-**Files:**
-- Modify: `lib/pages-data.ts` (collapse to single read path)
-- Modify: `lib/paths.ts` (delete `isStaticExport`)
-- Modify: `next.config.mjs` (delete `NEXT_PUBLIC_STATIC_EXPORT`)
-- Modify: `lib/spx-weekdays.ts` (delete `SpxWeekdayPayload`-related exports if any — verify)
-- Modify: `app/spx-weekdays/spx-weekday-dashboard.tsx` (collapse fetch URL, drop `database`/`warning` field reads, refactor `SourceNote` to take freshness as a prop)
-- Modify: `app/spx-weekdays/page.tsx` (pass manifest freshness for spxWeekdays as a prop to the dashboard)
-- Modify: `tests/spx-weekday-layout.test.ts` (update fixture to drop `database` and `warning`)
-
-The `SpxWeekdayPayload` type currently includes `database` and `warning` (from the deleted service). Those fields are gone. The dashboard's `SourceNote` will instead receive a small freshness prop from the server page, which reads the manifest at build time.
-
-- [ ] **Step 1: Define a smaller `SourceFreshness` type and pass it from the page**
-
-In `lib/pages-data.ts`, replace the existing contents with:
-
-```typescript
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { ManifestSchema, type Manifest, type SourceStatus } from "./schemas/manifest";
-
-const staticDataRoot = join(process.cwd(), "public", "data");
-
-export async function readStaticJson<T>(relativePath: string): Promise<T> {
-  const contents = await readFile(join(staticDataRoot, relativePath), "utf8");
-  return JSON.parse(contents) as T;
-}
-
-export async function readManifest(): Promise<Manifest> {
-  const text = await readFile(join(staticDataRoot, "manifest.json"), "utf8");
-  return ManifestSchema.parse(JSON.parse(text));
-}
-
-export async function loadShillerPageDataset() {
-  return readStaticJson<unknown>("shiller.json") as Promise<any>;
-}
-
-export async function loadBuffettPageDataset() {
-  return readStaticJson<unknown>("buffett.json") as Promise<any>;
-}
-
-export async function loadSpxWeekdayPageDataset() {
-  return readStaticJson<unknown>("spx-weekdays/1y-openClose.json") as Promise<any>;
-}
-
-export async function loadSpxWeekdayVariant(range: string, method: string) {
-  return readStaticJson<unknown>(`spx-weekdays/${range}-${method}.json`) as Promise<any>;
-}
-
-export function sourceFreshnessFor(manifest: Manifest, key: keyof Manifest["sources"]): SourceStatus {
-  return manifest.sources[key];
-}
-```
-
-The exact return types (`any` here) get replaced once the consumers are updated. Keep them loose for the moment; the dashboard pages do the narrowing.
-
-- [ ] **Step 2: Delete `isStaticExport` from `lib/paths.ts`**
-
-Replace `lib/paths.ts` contents with:
-
-```typescript
-export const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? "");
-
-export function withBasePath(path: string): string {
-  if (!path.startsWith("/") || path.startsWith("//")) {
-    return path;
-  }
-  return `${basePath}${path}` || path;
-}
-
-function normalizeBasePath(path: string): string {
-  if (!path || path === "/") {
-    return "";
-  }
-  return path.startsWith("/") ? path.replace(/\/$/, "") : `/${path.replace(/\/$/, "")}`;
-}
-```
-
-- [ ] **Step 3: Delete `NEXT_PUBLIC_STATIC_EXPORT` from `next.config.mjs`**
-
-In `next.config.mjs`, modify the `env` block inside the `isGithubPages` conditional:
-
-```javascript
-        env: {
-          NEXT_PUBLIC_BASE_PATH: githubPagesBasePath
-        }
-```
-
-(Drop the `NEXT_PUBLIC_STATIC_EXPORT: "true"` line.)
-
-- [ ] **Step 4: Trim `SpxWeekdayPayload` shape**
-
-In `app/spx-weekdays/spx-weekday-dashboard.tsx`, find the file's type imports from `lib/spx-weekday-service` — that module is deleted. Find the type usage `SpxWeekdayPayload`. It currently has shape (from the deleted service):
-
-```typescript
-type SpxWeekdayPayload = SpxWeekdayDataset & {
-  source: {...};
-  database: {...};   // delete
-  warning: string | null;  // delete
-};
-```
-
-Replace the import with a local type definition at the top of `app/spx-weekdays/spx-weekday-dashboard.tsx`:
-
-```typescript
-import type {
-  SpxRange,
-  SpxReturnMethod,
-  SpxWeekdayDataset,
-  SpxWeekdayReturn,
-  SpxWeekdayStat,
-  WeekdayName
-} from "../../lib/spx-weekdays";
-
-export type SpxWeekdayPayload = SpxWeekdayDataset & {
-  source: {
-    key: string;
-    name: string;
-    displayName: string;
-    provider: string;
-    url: string;
-  };
-};
-
-export type SourceFreshness = {
-  lastSuccessfulFetchAt: string | null;
-  lastAttemptedFetchAt: string;
-  latestDate: string | null;
-  rowCount: number;
-  status: "ok" | "stale" | "failed";
-  errorMessage: string | null;
-};
-```
-
-Also: export `SpxWeekdayDataset` from `lib/spx-weekdays.ts` if not already exported. (Check: it's likely already exported as `type`. Verify with `grep "export type" lib/spx-weekdays.ts`.)
-
-- [ ] **Step 5: Update `SourceNote` to take freshness as a prop**
-
-In `app/spx-weekdays/spx-weekday-dashboard.tsx`, find the `SourceNote` function. Currently:
-
-```typescript
-function SourceNote({ dataset, fetchError }: { dataset: SpxWeekdayPayload; fetchError: string | null }) {
-  return (
-    <section className="sourceNote panel">
-      <p className="eyebrow">Source freshness</p>
-      <p>
-        Local cache covers {dataset.database.firstDate ...} ...
-      </p>
-      <p className="sourceLine">
-        Source fetched from <a href={dataset.source.url}>{dataset.source.displayName}</a>
-        {dataset.database.latestFetchedAt ? `; latest row fetched ${formatDateTime(dataset.database.latestFetchedAt)}` : ""}
-        {dataset.database.lastSuccessfulRefreshAt ? `; last refresh ${formatDateTime(dataset.database.lastSuccessfulRefreshAt)}` : ""}.
-      </p>
-      {dataset.warning ? ... : null}
-      {fetchError ? ... : null}
-    </section>
-  );
-}
-```
-
-Replace with:
-
-```typescript
-function SourceNote({
-  dataset,
-  freshness,
-  fetchError
-}: {
-  dataset: SpxWeekdayPayload;
-  freshness: SourceFreshness;
-  fetchError: string | null;
-}) {
-  return (
-    <section className="sourceNote panel">
-      <p className="eyebrow">Source freshness</p>
-      <p>
-        Showing data through {freshness.latestDate ? formatDay(freshness.latestDate) : "n/a"}{" "}
-        ({freshness.rowCount.toLocaleString()} daily rows).
-      </p>
-      <p className="sourceLine">
-        Source: <a href={dataset.source.url}>{dataset.source.displayName}</a>
-        {freshness.lastSuccessfulFetchAt
-          ? `; last successful fetch ${formatDateTime(freshness.lastSuccessfulFetchAt)}`
-          : ""}
-        .
-      </p>
-      {freshness.status !== "ok" && freshness.errorMessage ? (
-        <p className="weekdayWarning">Source warning: {freshness.errorMessage}</p>
-      ) : null}
-      {fetchError ? (
-        <p className="weekdayWarning">Update failed: {fetchError}</p>
-      ) : null}
-    </section>
-  );
-}
-```
-
-Also find every other read of `dataset.database.*` or `dataset.warning` in the dashboard and remove or substitute with `freshness.*` fields.
-
-- [ ] **Step 6: Collapse `getSpxWeekdayDataUrl` to the static-JSON path**
-
-In `app/spx-weekdays/spx-weekday-dashboard.tsx`, find:
-
-```typescript
-function getSpxWeekdayDataUrl(range: SpxRange, method: SpxReturnMethod): string {
-  return isStaticExport
-    ? withBasePath(`/data/spx-weekdays/${range}-${method}.json`)
-    : withBasePath(`/api/spx-weekdays?range=${range}&method=${method}`);
-}
-```
-
-Replace with:
-
-```typescript
-function getSpxWeekdayDataUrl(range: SpxRange, method: SpxReturnMethod): string {
-  return withBasePath(`/data/spx-weekdays/${range}-${method}.json`);
-}
-```
-
-Also remove the `isStaticExport` import (since `lib/paths.ts` no longer exports it).
-
-- [ ] **Step 7: Update `app/spx-weekdays/page.tsx` to pass freshness as a prop**
-
-Replace the file with:
-
-```tsx
-import { SpxWeekdayDashboard, type SourceFreshness, type SpxWeekdayPayload } from "./spx-weekday-dashboard";
-import { loadSpxWeekdayPageDataset, readManifest } from "../../lib/pages-data";
-
-export const metadata = {
-  title: "SPX weekdays | Market Atlas"
-};
-
-export default async function SpxWeekdaysPage() {
-  try {
-    const [initialDataset, manifest] = await Promise.all([
-      loadSpxWeekdayPageDataset() as Promise<SpxWeekdayPayload>,
-      readManifest()
-    ]);
-    const freshness: SourceFreshness = manifest.sources.spxWeekdays;
-
-    return <SpxWeekdayDashboard initialDataset={initialDataset} freshness={freshness} />;
-  } catch (error) {
-    return (
-      <SpxWeekdayDashboard
-        initialDataset={null}
-        freshness={null}
-        initialError={
-          error instanceof Error
-            ? error.message
-            : "Unable to load SPX weekday performance data"
-        }
-      />
-    );
-  }
-}
-```
-
-- [ ] **Step 8: Update `SpxWeekdayDashboardProps`**
-
-In `app/spx-weekdays/spx-weekday-dashboard.tsx`, update the props type:
-
-```typescript
-type SpxWeekdayDashboardProps = {
-  initialDataset: SpxWeekdayPayload | null;
-  freshness: SourceFreshness | null;
-  initialError?: string | null;
-};
-```
-
-Pass `freshness` through to `<SourceNote>`. When `freshness` is null (error state), `SourceNote` won't be rendered (it's only rendered when `dataset` is present, and the error UI path doesn't render it).
-
-- [ ] **Step 9: Update `tests/spx-weekday-layout.test.ts` fixture**
-
-Read the test file and find the fixture that uses `database` and `warning` fields. Remove those keys. Also ensure the test passes a `freshness` prop matching `SourceFreshness`:
-
-```typescript
-const freshness: SourceFreshness = {
-  status: "ok",
-  latestDate: "2026-05-08",
-  rowCount: 8312,
-  lastSuccessfulFetchAt: "2026-05-11T00:32:14.123Z",
-  lastAttemptedFetchAt: "2026-05-11T00:32:14.123Z",
-  errorMessage: null
-};
-```
-
-And pass it to the rendered component.
-
-- [ ] **Step 10: Verify tests + build**
-
-```bash
-npm test
-npm run build
-```
-
-Expected: all tests pass; build succeeds. If a typecheck error references `database`, `warning`, or `isStaticExport`, fix the remaining reference.
-
-- [ ] **Step 11: Commit**
-
-```bash
-git add lib/pages-data.ts lib/paths.ts next.config.mjs \
-        app/spx-weekdays/page.tsx app/spx-weekdays/spx-weekday-dashboard.tsx \
-        tests/spx-weekday-layout.test.ts \
-        lib/spx-weekdays.ts
-git commit -m "$(cat <<'EOF'
-Collapse data-loading abstractions to single static read path
-
-- lib/pages-data.ts reduces to readStaticJson + readManifest;
-  isGithubPagesBuild branch deleted
-- lib/paths.ts drops isStaticExport (no consumer remaining)
-- next.config.mjs drops NEXT_PUBLIC_STATIC_EXPORT env export
-- SpxWeekdayPayload loses database + warning fields; dashboard
-  takes freshness as a prop from the server page that reads the
-  manifest at build time
-- getSpxWeekdayDataUrl collapses to /data/spx-weekdays/* only
-- spx-weekday-layout test fixture updated to new shape
 EOF
 )"
 ```
@@ -2640,7 +2668,7 @@ Append to the file:
   gap: 4px;
 }
 
-nav a[aria-current="page"] {
+.topbar nav a[aria-current="page"] {
   color: var(--ink);
   text-decoration: underline;
   text-underline-offset: 4px;
@@ -2696,7 +2724,7 @@ Pure Node script run after `npm run build:pages`. Verifies routes, data files, m
 - [ ] **Step 1: Create `scripts/test-static-export.ts`**
 
 ```typescript
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { ManifestSchema } from "../lib/schemas/manifest";
@@ -3131,6 +3159,29 @@ In each page, verify:
 - "Data sources" link in nav goes to `/market-atlas/data/`.
 - No console errors.
 
+- [ ] **Step 5b: Force an error state and verify the link goes to `/data`**
+
+```bash
+# With the npx serve still running:
+mv out/data/shiller.json /tmp/shiller.json.bak
+# (Cannot easily reload — out/ is static. Instead force the error path
+# locally: rename public/data/shiller.json before npm run dev.)
+mv public/data/shiller.json /tmp/shiller.json.disk-bak
+npm run dev -- -p 3001
+```
+
+Open `http://localhost:3001/` in the in-app browser. The error-state branch should render with "Check the data endpoint" or similar link. Verify the link `href` points to `/data` (or `/market-atlas/data` in production basePath), **not** `/api/shiller`.
+
+Repeat by renaming `public/data/buffett.json` and visiting `/buffett`, then `spx-weekdays/*.json` and visiting `/spx-weekdays`.
+
+Restore when done:
+
+```bash
+mv /tmp/shiller.json.disk-bak public/data/shiller.json
+mv /tmp/shiller.json.bak out/data/shiller.json
+# (and any others you renamed)
+```
+
 - [ ] **Step 6: Simulated source-failure smoke check**
 
 Test the preserve-on-failure path locally:
@@ -3154,10 +3205,10 @@ Confirm the test `one fetcher rejects → that source stale, others ok, file unt
 - [ ] **Step 7: Verify the bootstrap commits look right in `git log`**
 
 ```bash
-git log --oneline -10
+git log --oneline -15
 ```
 
-Expected: roughly this sequence (commits from this PR's branch, plus the Pre-Work commit before it on main):
+Expected: roughly this sequence (commits from this PR's branch in reverse-chronological order, plus the Pre-Work commit at the bottom):
 
 ```
 <sha>  Update README for unified static-export model
@@ -3165,16 +3216,17 @@ Expected: roughly this sequence (commits from this PR's branch, plus the Pre-Wor
 <sha>  Add post-build static-export smoke test
 <sha>  Add /data route surfacing manifest and downloads
 <sha>  Update page nav and error-state links
-<sha>  Collapse data-loading abstractions to single static read path
 <sha>  Demolish app/api, lib/market-data, SQLite cache layer
+<sha>  Collapse data-loading abstractions to single static read path
 <sha>  Generate initial public/data/manifest.json
 <sha>  Add generate-static-data orchestrator with L3 validation
 <sha>  Add Zod L3 schemas for manifest and per-source datasets
 <sha>  Lift shared date formatters to lib/format.ts
 <sha>  Track public/data/*.json as committed fallback
+<sha>  Add realized one-year-ahead Forward PE comparison chart  ← Pre-Work
 ```
 
-(Plus the Pre-Work `Add realized one-year-ahead Forward PE comparison chart` commit further down.)
+Note the new order — **Collapse** (Task 6) comes **before** **Demolish** (Task 7) so the build never breaks mid-PR.
 
 - [ ] **Step 8: Final commit if anything was patched**
 
