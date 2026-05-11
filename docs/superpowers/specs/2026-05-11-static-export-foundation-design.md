@@ -114,11 +114,16 @@ No `/api/*` paths. No fallback fetch logic. No SQLite. No `isStaticExport` branc
 ## Local Development
 
 ```
-npm run generate:pages-data    # fetch + validate + write public/data
+npm install
+npm run generate:pages-data    # fetch + validate + write public/data — REQUIRED first time
 npm run dev                    # next dev reads from public/data
 ```
 
-`lib/pages-data.ts` collapses to a single `readStaticJson<T>(relativePath)` helper. The `GITHUB_PAGES === "true"` switch is deleted.
+`lib/pages-data.ts` collapses to a single `readStaticJson<T>(relativePath)` helper. The `GITHUB_PAGES === "true"` switch is deleted. The `NEXT_PUBLIC_STATIC_EXPORT` env var (exported from `next.config.mjs`) and the `isStaticExport` flag (exported from `lib/paths.ts`) are also deleted — neither has a consumer once the dashboard fetch URLs collapse to static-JSON paths.
+
+After a fresh clone, the committed `public/data/*.json` files are present (they are git-tracked under the new model), so `npm run dev` works immediately. Running `npm run generate:pages-data` first is recommended only when you want a fresh snapshot during local development.
+
+`tsx` (already in `devDependencies`) is what allows `scripts/generate-pages-data.mjs` to import directly from `lib/generate-static-data.ts` without an intermediate compile step. The `.mjs` entry stays an `.mjs` so existing tooling and npm scripts don't shift.
 
 ## Manifest Schema
 
@@ -146,15 +151,33 @@ type SourceStatus = {
   displayName: string;
   status: "ok" | "stale" | "failed";
   latestDate: string | null;       // YYYY-MM-DD of latest row in source JSON
-  rowCount: number;                // count of points in the source's JSON
-  sourceUrl: string;
+  rowCount: number;                // see "rowCount semantics" below
+  sourceUrls: string[];            // primary URL first; UI shows the first by default
   lastSuccessfulFetchAt: string | null;  // ISO 8601, may predate generatedAt
   lastAttemptedFetchAt: string;          // ISO 8601, almost always = generatedAt
   errorMessage: string | null;     // populated when status != "ok"
 };
 ```
 
-`spxWeekdays.rowCount` is the underlying daily SPX cache size, not summed across the 18 variants.
+### Canonical display names and source URLs
+
+Defined once as constants in `lib/generate-static-data.ts`:
+
+| Key | `displayName` | `sourceUrls` (primary first) |
+|---|---|---|
+| `shiller` | `"Shiller CAPE workbook"` | `[SHILLER_SOURCE_URLS[0], FRED_SP500_URL, NASDAQ_SPY_SOURCE_URL]` |
+| `buffett` | `"FRED Buffett indicator + World Bank"` | `[FRED_MARKET_VALUE_URL, FRED_GDP_URL, FRED_WORLD_GDP_URL, WORLD_BANK_MARKET_VALUE_URL]` |
+| `spxWeekdays` | `"Yahoo Finance SPX chart"` | `[YAHOO_SPX_CHART_BASE_URL]` |
+
+The constants come from the existing `lib/shiller.ts`, `lib/buffett.ts`, and `lib/spx-source.ts` exports. The `/data` UI renders the primary URL prominently and the rest in a small "Additional sources" line.
+
+### `rowCount` semantics
+
+- `shiller.rowCount` — `ShillerDataset.points.length` (the merged monthly + daily series).
+- `buffett.rowCount` — `BuffettDataset.points.length` (the U.S./U.S. variant; the world variants are derivatives).
+- `spxWeekdays.rowCount` — count of raw daily SPX prices parsed from the Yahoo chart. **Not** a field inside any per-variant JSON; populated directly from the parsed `SpxDailyPrice[]` array in the orchestrator before the 18 variants are built.
+
+### Other
 
 `generatedBy.ref` is `"local"` when no `GITHUB_REF` is present. `sha`, `runId`, and `runUrl` are `null` in that case.
 
@@ -181,14 +204,18 @@ Four schemas live under `lib/schemas/`:
 - `buffett.ts` — `BuffettDatasetSchema`.
 - `spx-weekdays.ts` — `SpxWeekdayPayloadSchema` applied per variant.
 
-L3 bounds enforced:
+L3 bounds enforced inside the Zod schemas:
 
 - All `date` fields match `/^\d{4}-\d{2}-\d{2}$/`.
 - All numbers `.finite()` — rejects `NaN`, `Infinity`, `-Infinity`.
 - Within each series, dates monotonically ascending (custom `.refine`).
 - `cape > 0 && cape < 200`.
 - `price > 0`, `earnings > 0`, `ratio > 0` where present.
-- Minimum row counts: shiller `>= 1500`, buffett `>= 200`, spxWeekdays `all` variant `>= 5000`, other variants `length > 0`.
+- Schema-level minimum row counts: shiller `points.length >= 1500`, buffett `points.length >= 200`. Per spxWeekdays variant: `weekdayStats.length === 5`, `summaryPoints.length === 5`, `cumulativeSeries.length === 5`.
+
+Validation that does **not** fit inside the per-variant schema (because the underlying raw daily prices are not part of the per-variant JSON) is enforced one level up, in `lib/generate-static-data.ts`, before per-variant build:
+
+- Parsed `SpxDailyPrice[]` has `length >= 5000` (~20 years of trading days). If not, the `spxWeekdays` source as a whole goes to `stale`, all 18 variant JSONs are preserved, and `manifest.sources.spxWeekdays.rowCount` reflects the prior committed value.
 
 On validation failure, the Zod error is summarized into the first 3 issues joined by `"; "` and written to `manifest.sources[x].errorMessage`. The full Zod error is logged to workflow stderr.
 
@@ -223,8 +250,15 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: "30 0 * * 2-6"   # 7:30 PM CDT (UTC-5)
-    - cron: "30 1 * * 2-6"   # 7:30 PM CST (UTC-6)
+    # GitHub cron uses UTC.
+    #
+    # 7:30 PM America/Chicago (CDT, UTC-5)  => 00:30 UTC next day
+    # 7:30 PM America/Chicago (CST, UTC-6)  => 01:30 UTC next day
+    #
+    # We schedule both and use the should-deploy guard to only proceed
+    # when local America/Chicago time matches 19:30.
+    - cron: "30 0 * * 2-6"   # Tue-Sat UTC => Mon-Fri local
+    - cron: "30 1 * * 2-6"   # Tue-Sat UTC => Mon-Fri local
 
 permissions:
   contents: write    # was read; needed for auto-commit
@@ -318,6 +352,7 @@ jobs:
 
 - `permissions.contents` flips from `read` to `write` so the auto-commit step can `git push`.
 - The default `GITHUB_TOKEN` inherits write access from the workflow `permissions` block — no PAT required.
+- `actions/checkout@v6` is used with default options: credentials are persisted, allowing `git push` later in the same job without setting `with: token:` or `persist-credentials:`. Default `fetch-depth: 1` is sufficient because we only need to commit-and-push, not rebase.
 - `[skip ci]` is recognized natively by GitHub Actions to suppress re-trigger.
 - Auto-commit runs on `schedule` or `workflow_dispatch`. A `push` event implies a developer is publishing a code change; an automatic data commit on top would muddy the history.
 - If a concurrent `git push` invalidates ours (non-fast-forward), the step logs `::warning::` and the deploy still proceeds with the artifact this run built. The next scheduled run picks up. If this becomes common, add a `git pull --rebase --autostash` retry — held back for now to keep the script simple.
@@ -351,12 +386,14 @@ jobs:
 | `lib/pages-data.ts` | Collapse to single `readStaticJson<T>` path; delete `isGithubPagesBuild` switch |
 | `lib/shiller.ts` | Delete the 6-hour in-memory cache wrapper (`cachedDataset` + TTL) |
 | `lib/buffett.ts` | Same — delete cache wrapper |
-| `app/page.tsx`, `app/chart/page.tsx`, `app/buffett/page.tsx`, `app/spx-weekdays/page.tsx` | Nav `/#about` to `/data`; error-state links from `/api/*` to `/data/*.json` |
-| `app/dashboard.tsx`, `app/chart/detailed-chart.tsx`, `app/buffett/buffett-dashboard.tsx` | Nav updates; import `formatDateTime` from `lib/format.ts` |
-| `app/spx-weekdays/spx-weekday-dashboard.tsx` | `getSpxWeekdayDataUrl` collapses to static-JSON path; `SourceNote` accepts freshness as a prop from the server page; type changes from `SpxWeekdayPayload` removal of `database` and `warning` |
+| `app/page.tsx`, `app/chart/page.tsx`, `app/buffett/page.tsx`, `app/spx-weekdays/page.tsx` | Nav `/#about` to `/data`; error-state links from `/api/*` to `/data/*.json`; drop `export const revalidate = 21600` where present (no-op under static export) |
+| `app/dashboard.tsx`, `app/chart/detailed-chart.tsx`, `app/buffett/buffett-dashboard.tsx`, `app/valuation-chart.tsx` | Nav updates (where applicable); import shared date formatters from `lib/format.ts` |
+| `app/spx-weekdays/spx-weekday-dashboard.tsx` | `getSpxWeekdayDataUrl` collapses to static-JSON path (`isStaticExport` branch deleted); `SourceNote` accepts freshness as a prop from the server page; type changes from `SpxWeekdayPayload` removal of `database` and `warning`; imports shared date formatters from `lib/format.ts` |
 | `app/globals.css` | New classes for `/data` route — `sourceCard`, `downloadLinks`, `buildMetadataStrip`; active-nav rule |
+| `next.config.mjs` | Delete `NEXT_PUBLIC_STATIC_EXPORT` from the `env` block (no consumer remains) |
+| `lib/paths.ts` | Delete the `isStaticExport` constant export |
 | `README.md` | Replace `/api/*` references with `/data/*.json`; document `/data` route + manifest |
-| `.gitignore` | Remove `data/*.sqlite*` lines |
+| `.gitignore` | Remove `public/data/` (this is the foundation change — the committed JSON model requires `public/data/` to be tracked). Remove `data/*.sqlite*` lines |
 | `next-env.d.ts` | Reset routes-d-ts path drift (Next regenerates) |
 
 ### Deleted files and directories
@@ -425,7 +462,7 @@ Pure Node script, not Vitest. Runs after `npm run build:pages` via `npm run test
 1. Required routes exist as files: `out/index.html`, `out/chart/index.html`, `out/buffett/index.html`, `out/spx-weekdays/index.html`, `out/data/index.html`.
 2. Required data files exist: `out/data/manifest.json`, `out/data/shiller.json`, `out/data/buffett.json`, all 18 `out/data/spx-weekdays/<range>-<method>.json`.
 3. `out/data/manifest.json` parses against `ManifestSchema`.
-4. No `"/api/"` or `'/api/'` substrings appear in any `out/**/*.html` file.
+4. No `"/api/"` or `'/api/'` substrings appear in any `out/**/*.html` *or* `out/**/*.js` file. (Next inlines route references into chunks; HTML-only scan misses client-side leaks.)
 5. `out/index.html` contains `/market-atlas/` references confirming the basePath was applied.
 
 Exits 1 on any failure with a pass/fail summary for each check.
@@ -476,7 +513,12 @@ Layout:
 
 Reused CSS classes: `shell`, `topbar`, `panel`, `eyebrow`, `chartStat`, `statusBadge`, `sourceNote`, `sourceLine`. New classes in `app/globals.css`: `sourceCard`, `downloadLinks`, `buildMetadataStrip`. The active-nav rule (`nav a[aria-current="page"]`) is added once and applied across the four existing pages plus `/data`.
 
-Date formatting: `formatDateTime`, `formatDay`, `formatMonth`, `formatYear` are lifted to a new `lib/format.ts` from their current per-page duplicates and reused by `/data`, dashboard, detailed-chart, buffett-dashboard, and spx-weekday-dashboard.
+Date formatting: `formatDateTime`, `formatDay`, `formatMonth`, `formatYear` are lifted to a new `lib/format.ts` from their per-page duplicates in `app/dashboard.tsx`, `app/chart/detailed-chart.tsx`, `app/buffett/buffett-dashboard.tsx`, `app/valuation-chart.tsx`, and `app/spx-weekdays/spx-weekday-dashboard.tsx`. Reused by `/data` plus the five consumers above.
+
+The single-use helpers stay where they are — out of scope for this sub-project's cleanup:
+- `formatQuarter` (only used in `buffett-dashboard.tsx`)
+- `formatPercent`, `formatNullablePercent`, `formatCompactPercent`, `formatInteger`, `formatTickDate` (only used in `spx-weekday-dashboard.tsx`)
+- `formatCompactNumber` (only used in `detailed-chart.tsx`)
 
 Accessibility:
 
@@ -500,6 +542,21 @@ Before sub-project (1) starts, commit the in-flight Forward-PE feature:
 This is a single commit, separate from sub-project (1) work. The feature ships immediately under the existing custom-SVG chart pattern. Sub-project (2) will migrate it to the new chart library alongside the other charts.
 
 The sub-project (1) PR diff therefore stays clean — none of the Forward-PE files are touched by (1) other than the existing nav-link update across `app/chart/detailed-chart.tsx`.
+
+## Bootstrap (One-Time Setup During Sub-Project 1)
+
+The current repo state has `public/data/` listed in `.gitignore` (line 5), so the existing `public/data/shiller.json`, `public/data/buffett.json`, and 18 `public/data/spx-weekdays/*.json` files are present on disk but untracked. The new pipeline requires these files to be git-tracked so they serve as the committed fallback.
+
+The first commit of sub-project (1) must include:
+
+1. Edit `.gitignore` to remove the `public/data/` line.
+2. `git add public/data/` to begin tracking the existing files.
+3. Run `npm run generate:pages-data` once locally to refresh and write `public/data/manifest.json` so the initial commit includes a manifest.
+4. `git add public/data/manifest.json`.
+
+Without step 2, the auto-commit step in scheduled runs has nothing to commit (the files would still be ignored).
+
+This bootstrap happens once per repo, in the first sub-project (1) PR. Subsequent CI runs append data updates to history normally.
 
 ## Sub-Project Boundaries (Out Of Scope)
 
