@@ -2134,17 +2134,28 @@ After Task 6 rewired all consumers, nothing imports the legacy code. This task r
 
 - [ ] **Step 1: Verify no consumers remain (Task 6 should have cleared them)**
 
+The greps below filter out **the entire deletion set** (`app/api/`, `lib/market-data/`, `lib/spx-weekday-service.ts`, `tests/market-data.test.ts`, `tests/spx-weekday-service.test.ts`) so that any remaining match represents a *real* outside-the-deletion-set consumer that Task 6 missed.
+
 ```bash
 grep -rn "lib/spx-weekday-service" app/ lib/ scripts/ tests/ 2>/dev/null \
-  | grep -v "^lib/spx-weekday-service.ts"
+  | grep -v "^lib/spx-weekday-service\.ts" \
+  | grep -v "^app/api/" \
+  | grep -v "^tests/spx-weekday-service\.test\.ts"
+
 grep -rn "lib/market-data" app/ lib/ scripts/ tests/ 2>/dev/null \
-  | grep -v "^lib/market-data/\|^lib/spx-weekday-service.ts\|^tests/market-data.test.ts"
-grep -rn '"\.\./\.\./api\|"\.\./api' app/ lib/ scripts/ tests/ 2>/dev/null
+  | grep -v "^lib/market-data/" \
+  | grep -v "^lib/spx-weekday-service\.ts" \
+  | grep -v "^tests/market-data\.test\.ts" \
+  | grep -v "^tests/spx-weekday-service\.test\.ts"
+
+# References to /api/* import paths from app/ outside the deletion set
+grep -rn '"\.\./\.\./api/\|"\.\./api/' app/ lib/ scripts/ tests/ 2>/dev/null \
+  | grep -v "^app/api/"
 ```
 
-Expected: all three return **empty**. The only references to the about-to-be-deleted modules should be inside the files being deleted themselves.
+Expected: all three return **empty**.
 
-If any grep returns content, **stop**. Task 6 missed a consumer — go back and fix Task 6 before continuing.
+If any grep returns content, **stop** — Task 6 missed a consumer. Fix Task 6 before continuing.
 
 - [ ] **Step 2: Delete the SQLite layer + service + their tests**
 
@@ -2319,7 +2330,7 @@ Apply these edits:
 
 - [ ] **Step 4: Update `app/spx-weekdays/page.tsx`**
 
-(Already updated in Task 7 Step 7 — verify nav has `/data` link and no `/api/*` references.)
+(Already updated in Task 6 Step 7 — verify nav has `/data` link and no `/api/*` references.)
 
 - [ ] **Step 5: Update `app/dashboard.tsx`**
 
