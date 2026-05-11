@@ -49,7 +49,8 @@ A static-export server page that reads `public/data/manifest.json` at build time
   - Last successful fetch timestamp.
   - Last attempted fetch timestamp (shown only when status is not `ok`).
   - Latest data row date plus row count.
-  - Compact source host with link to full source URL.
+  - Primary source: host of `sourceUrls[0]` with link to the full URL.
+  - "Additional sources" line when `sourceUrls.length > 1` (Shiller and Buffett); each remaining host links to its full URL.
   - Inline download link(s) to the source's JSON file(s).
   - Error message if status is `stale` or `failed`.
 - For `spxWeekdays`, the download list is a collapsible `<details>` with all 18 range/method variants.
@@ -115,13 +116,13 @@ No `/api/*` paths. No fallback fetch logic. No SQLite. No `isStaticExport` branc
 
 ```
 npm install
-npm run generate:pages-data    # fetch + validate + write public/data — REQUIRED first time
-npm run dev                    # next dev reads from public/data
+npm run dev                    # next dev reads committed public/data/*.json
+npm run generate:pages-data    # optional — refresh public/data with fresh fetches
 ```
 
 `lib/pages-data.ts` collapses to a single `readStaticJson<T>(relativePath)` helper. The `GITHUB_PAGES === "true"` switch is deleted. The `NEXT_PUBLIC_STATIC_EXPORT` env var (exported from `next.config.mjs`) and the `isStaticExport` flag (exported from `lib/paths.ts`) are also deleted — neither has a consumer once the dashboard fetch URLs collapse to static-JSON paths.
 
-After a fresh clone, the committed `public/data/*.json` files are present (they are git-tracked under the new model), so `npm run dev` works immediately. Running `npm run generate:pages-data` first is recommended only when you want a fresh snapshot during local development.
+After a fresh clone, the committed `public/data/*.json` files are present (they are git-tracked under the new model), so `npm run dev` works immediately without any pre-step. Run `npm run generate:pages-data` only when you want to refresh against live sources during local work.
 
 `tsx` (already in `devDependencies`) is what allows `scripts/generate-pages-data.mjs` to import directly from `lib/generate-static-data.ts` without an intermediate compile step. The `.mjs` entry stays an `.mjs` so existing tooling and npm scripts don't shift.
 
@@ -384,7 +385,7 @@ jobs:
 | `package.json` | Add `zod` dependency; add `test:static` script |
 | `.github/workflows/deploy-pages.yml` | Permissions, generate step, unit-test step, smoke-test step, auto-commit step |
 | `lib/pages-data.ts` | Collapse to single `readStaticJson<T>` path; delete `isGithubPagesBuild` switch |
-| `lib/shiller.ts` | Delete the 6-hour in-memory cache wrapper (`cachedDataset` + TTL) |
+| `lib/shiller.ts` | Delete the 6-hour in-memory cache wrapper (`cachedDataset` + TTL). Add `export` to `SHILLER_SOURCE_URLS`, `FRED_SP500_URL`, `NASDAQ_SPY_SOURCE_URL` so `lib/generate-static-data.ts` can consume them (currently file-internal `const`s) |
 | `lib/buffett.ts` | Same — delete cache wrapper |
 | `app/page.tsx`, `app/chart/page.tsx`, `app/buffett/page.tsx`, `app/spx-weekdays/page.tsx` | Nav `/#about` to `/data`; error-state links from `/api/*` to `/data/*.json`; drop `export const revalidate = 21600` where present (no-op under static export) |
 | `app/dashboard.tsx`, `app/chart/detailed-chart.tsx`, `app/buffett/buffett-dashboard.tsx`, `app/valuation-chart.tsx` | Nav updates (where applicable); import shared date formatters from `lib/format.ts` |
@@ -507,7 +508,8 @@ Layout:
 - "Last successful fetch: ..." (formatted timestamp).
 - "Last attempted: ..." (shown only when status is not `ok`).
 - "Latest data row: ... · N rows".
-- Source host (truncated) linking to full URL.
+- Primary source: host (truncated) of `sourceUrls[0]` linking to the full URL.
+- Additional sources: when `sourceUrls.length > 1`, a compact "Also: host1, host2, host3" line (each host linking to its full URL). Hides cleanly when there's only one URL.
 - Download list. For `spxWeekdays`, wrapped in `<details>` so the 18 variants collapse by default.
 - Error message if status is not `ok`.
 
@@ -547,16 +549,15 @@ The sub-project (1) PR diff therefore stays clean — none of the Forward-PE fil
 
 The current repo state has `public/data/` listed in `.gitignore` (line 5), so the existing `public/data/shiller.json`, `public/data/buffett.json`, and 18 `public/data/spx-weekdays/*.json` files are present on disk but untracked. The new pipeline requires these files to be git-tracked so they serve as the committed fallback.
 
-The first commit of sub-project (1) must include:
+Sub-project (1) is one PR with multiple commits. The bootstrap step happens in a specific commit order:
 
-1. Edit `.gitignore` to remove the `public/data/` line.
-2. `git add public/data/` to begin tracking the existing files.
-3. Run `npm run generate:pages-data` once locally to refresh and write `public/data/manifest.json` so the initial commit includes a manifest.
-4. `git add public/data/manifest.json`.
+1. **Commit A** (early in the PR, before the generator refactor): edit `.gitignore` to remove the `public/data/` line, then `git add public/data/` to track the existing 20 JSON files (`shiller.json`, `buffett.json`, 18 `spx-weekdays/*.json`). The current generator hasn't been touched yet, so no `manifest.json` exists at this point.
+2. **Subsequent commits** introduce `lib/generate-static-data.ts`, the Zod schemas, the new manifest-writing logic.
+3. **Commit B** (after the generator refactor lands): run `npm run generate:pages-data` locally, then `git add public/data/manifest.json` and commit. This is the first build of the new manifest.
 
-Without step 2, the auto-commit step in scheduled runs has nothing to commit (the files would still be ignored).
+Without commit A, the auto-commit step in scheduled runs would have nothing to commit (the files would still be `.gitignore`'d). Without commit B, the smoke test and `/data` route would fail because `manifest.json` doesn't exist. Both commits belong in the same PR.
 
-This bootstrap happens once per repo, in the first sub-project (1) PR. Subsequent CI runs append data updates to history normally.
+This bootstrap happens once per repo. Subsequent CI runs append data updates to history normally.
 
 ## Sub-Project Boundaries (Out Of Scope)
 
