@@ -2,11 +2,8 @@ node_modules/
 .worktrees/
 .next/
 out/
-public/data/
 .env*.local
 tsconfig.tsbuildinfo
 .superpowers/
 .DS_Store
 .idea/
-data/*.sqlite
-data/*.sqlite-*

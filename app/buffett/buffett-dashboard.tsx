@@ -5,6 +5,7 @@ import {
   getBuffettSnapshot,
   type BuffettPoint
 } from "../../lib/buffett";
+import { formatDateTime, formatYear } from "../../lib/format";
 import { withBasePath } from "../../lib/paths";
 
 type BuffettDashboardProps = {
@@ -98,9 +99,9 @@ export function BuffettDashboard({
         <nav aria-label="Primary navigation">
           <a href={withBasePath("/")}>Dashboard</a>
           <a href={withBasePath("/chart")}>CAPE chart</a>
-          <a href={withBasePath("/buffett")}>Buffett indicator</a>
+          <a href={withBasePath("/buffett")} aria-current="page">Buffett indicator</a>
           <a href={withBasePath("/spx-weekdays")}>SPX weekdays</a>
-          <a href={withBasePath("/#about")}>Data sources</a>
+          <a href={withBasePath("/data")}>Data status</a>
         </nav>
       </header>
 
@@ -526,26 +527,8 @@ function formatPointLabel(date: string, comparison: ComparisonKey) {
   return comparison === "worldWorld" ? formatYear(date) : formatQuarter(date);
 }
 
-function formatYear(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(new Date(`${date}T00:00:00.000Z`));
-}
-
 function formatTrillions(valueInBillions: number) {
   return (valueInBillions / 1000).toFixed(1);
-}
-
-function formatDateTime(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short"
-  }).format(new Date(date));
 }
 
 function clamp(value: number, min: number, max: number): number {

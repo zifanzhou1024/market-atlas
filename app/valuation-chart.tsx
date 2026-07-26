@@ -8,6 +8,7 @@ import {
   shouldApplyWheelZoom,
   type DateWindow
 } from "../lib/chart-viewport";
+import { formatDay, formatMonth } from "../lib/format";
 import type { Ohlc, ShillerPoint } from "../lib/shiller";
 
 export type ChartMode = "line" | "candles";
@@ -412,23 +413,6 @@ function formatReadout(point: ShillerPoint, mode: ChartMode) {
   }
 
   return `CAPE ${point.cape.toFixed(2)} · ${point.frequency === "daily" ? "daily" : "monthly"}`;
-}
-
-function formatMonth(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(new Date(`${date}T00:00:00.000Z`));
-}
-
-function formatDay(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(new Date(`${date}T00:00:00.000Z`));
 }
 
 function dateForRatio(ratio: number, dateWindow: DateWindow) {

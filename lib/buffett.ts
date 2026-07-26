@@ -41,15 +41,7 @@ export const FRED_WORLD_GDP_URL =
 export const WORLD_BANK_MARKET_VALUE_URL =
   "https://api.worldbank.org/v2/country/WLD/indicator/CM.MKT.LCAP.CD?format=json&per_page=20000";
 
-const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
-
-let cachedDataset: { expiresAt: number; data: BuffettDataset } | undefined;
-
 export async function fetchBuffettData(): Promise<BuffettDataset> {
-  if (cachedDataset && cachedDataset.expiresAt > Date.now()) {
-    return cachedDataset.data;
-  }
-
   const [
     marketValueResponse,
     gdpResponse,
@@ -120,11 +112,6 @@ export async function fetchBuffettData(): Promise<BuffettDataset> {
     worldGdpSourceUrl: FRED_WORLD_GDP_URL,
     worldMarketValueSourceUrl: WORLD_BANK_MARKET_VALUE_URL,
     fetchedAt: new Date().toISOString()
-  };
-
-  cachedDataset = {
-    expiresAt: Date.now() + CACHE_TTL_MS,
-    data
   };
 
   return data;

@@ -1,5 +1,4 @@
 export const basePath = normalizeBasePath(process.env.NEXT_PUBLIC_BASE_PATH ?? "");
-export const isStaticExport = process.env.NEXT_PUBLIC_STATIC_EXPORT === "true";
 
 export function withBasePath(path: string): string {
   if (!path.startsWith("/") || path.startsWith("//")) {

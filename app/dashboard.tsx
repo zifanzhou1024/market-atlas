@@ -9,6 +9,7 @@ import {
   zoomDateWindow,
   type ChartPreset
 } from "../lib/chart-viewport";
+import { formatDateTime, formatDay, formatMonth } from "../lib/format";
 import type { ShillerPoint } from "../lib/shiller";
 import { getDashboardSnapshot } from "../lib/market-metrics";
 import {
@@ -96,12 +97,12 @@ export function Dashboard({
           Market Atlas
         </a>
         <nav aria-label="Primary navigation">
-          <a href="#dashboard">Dashboard</a>
+          <a href="#dashboard" aria-current="page">Dashboard</a>
           <a href={withBasePath("/chart")}>Detailed chart</a>
           <a href={withBasePath("/buffett")}>Buffett indicator</a>
           <a href={withBasePath("/spx-weekdays")}>SPX weekdays</a>
           <a href="#notes">Notes</a>
-          <a href="#about">About</a>
+          <a href={withBasePath("/data")}>Data status</a>
         </nav>
       </header>
 
@@ -296,34 +297,6 @@ function MetricPanel({
 
 function formatPointDate(point: ShillerPoint) {
   return point.frequency === "daily" ? formatDay(point.date) : formatMonth(point.date);
-}
-
-function formatMonth(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(new Date(`${date}T00:00:00.000Z`));
-}
-
-function formatDay(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(new Date(`${date}T00:00:00.000Z`));
-}
-
-function formatDateTime(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short"
-  }).format(new Date(date));
 }
 
 function formatPercent(value: number | null) {

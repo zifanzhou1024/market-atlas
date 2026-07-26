@@ -11,13 +11,14 @@ on:
     # 7:30 PM America/Chicago (CDT, UTC-5)  => 00:30 UTC next day
     # 7:30 PM America/Chicago (CST, UTC-6)  => 01:30 UTC next day
     #
-    # We schedule both and use a guard job to only proceed when the local
-    # America/Chicago time matches 19:30.
+    # We schedule both and select the matching UTC offset. The guard uses the
+    # triggering cron expression rather than the runner clock because GitHub
+    # may start scheduled workflows minutes or hours late.
     - cron: "30 0 * * 2-6" # Tue-Sat UTC => Mon-Fri local
     - cron: "30 1 * * 2-6" # Tue-Sat UTC => Mon-Fri local
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -40,13 +41,16 @@ jobs:
             exit 0
           fi
 
-          local_hour="$(TZ=America/Chicago date +%H)"
-          local_minute="$(TZ=America/Chicago date +%M)"
-          if [[ "$local_hour" == "19" && "$local_minute" == "30" ]]; then
+          chicago_offset="$(TZ=America/Chicago date +%z)"
+          scheduled_cron="${{ github.event.schedule }}"
+
+          if [[ "$scheduled_cron" == "30 0 * * 2-6" && "$chicago_offset" == "-0500" ]] ||
+             [[ "$scheduled_cron" == "30 1 * * 2-6" && "$chicago_offset" == "-0600" ]]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "run=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+
+          echo "run=false" >> "$GITHUB_OUTPUT"
 
   build:
     needs: should-deploy
@@ -57,6 +61,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: main
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -67,11 +73,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate and validate static data
+        run: npm run generate:pages-data
+
+      - name: Unit tests
+        run: npm test
+
       - name: Configure Pages
         uses: actions/configure-pages@v6
 
       - name: Build static export
-        run: npm run build:pages
+        run: node scripts/build-pages.mjs
+
+      - name: Static-export smoke test
+        run: npm run test:static
+
+      - name: Auto-commit refreshed data
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          if git diff --quiet public/data/; then
+            echo "No data changes; skipping commit"
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data/
+          git commit -m "chore(data): refresh $(date -u +%Y-%m-%d) [skip ci]"
+          git push || echo "::warning::Data commit push failed; the verified artifact will still deploy"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

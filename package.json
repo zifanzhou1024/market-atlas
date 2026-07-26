@@ -12,13 +12,15 @@
     "build:pages": "npm run generate:pages-data && node scripts/build-pages.mjs",
     "generate:pages-data": "tsx scripts/generate-pages-data.mjs",
     "start": "next start",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:static": "tsx scripts/test-static-export.ts"
   },
   "dependencies": {
     "next": "16.2.4",
     "react": "19.2.5",
     "react-dom": "19.2.5",
-    "xlsx": "0.18.5"
+    "xlsx": "0.18.5",
+    "zod": "^4.1.5"
   },
   "devDependencies": {
     "@types/node": "25.6.0",

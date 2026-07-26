@@ -2,8 +2,6 @@ import { loadBuffettPageDataset } from "../../lib/pages-data";
 import { withBasePath } from "../../lib/paths";
 import { BuffettDashboard } from "./buffett-dashboard";
 
-export const revalidate = 21600;
-
 export default async function BuffettPage() {
   try {
     const dataset = await loadBuffettPageDataset();
@@ -31,8 +29,9 @@ export default async function BuffettPage() {
           <nav aria-label="Primary navigation">
             <a href={withBasePath("/")}>Dashboard</a>
             <a href={withBasePath("/chart")}>CAPE chart</a>
-            <a href={withBasePath("/buffett")}>Buffett indicator</a>
+            <a href={withBasePath("/buffett")} aria-current="page">Buffett indicator</a>
             <a href={withBasePath("/spx-weekdays")}>SPX weekdays</a>
+            <a href={withBasePath("/data")}>Data status</a>
           </nav>
         </header>
         <section className="errorState" aria-labelledby="buffett-error-title">
@@ -43,7 +42,7 @@ export default async function BuffettPage() {
               ? error.message
               : "The public FRED data sources did not respond."}
           </p>
-          <a href={withBasePath("/api/buffett")}>Check the data endpoint</a>
+          <a href={withBasePath("/data")}>View data status</a>
         </section>
       </main>
     );

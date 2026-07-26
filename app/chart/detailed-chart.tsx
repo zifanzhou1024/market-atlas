@@ -9,6 +9,7 @@ import {
   zoomDateWindow,
   type ChartPreset
 } from "../../lib/chart-viewport";
+import { formatDateTime, formatDay, formatMonth, formatYear } from "../../lib/format";
 import {
   buildForwardPeComparisonPoints,
   type ForwardPeComparisonPoint
@@ -115,10 +116,10 @@ export function DetailedChart({
         </a>
         <nav aria-label="Primary navigation">
           <a href={withBasePath("/")}>Dashboard</a>
-          <a href={withBasePath("/chart")}>Detailed chart</a>
+          <a href={withBasePath("/chart")} aria-current="page">Detailed chart</a>
           <a href={withBasePath("/buffett")}>Buffett indicator</a>
           <a href={withBasePath("/spx-weekdays")}>SPX weekdays</a>
-          <a href={withBasePath("/#about")}>Data sources</a>
+          <a href={withBasePath("/data")}>Data status</a>
         </nav>
       </header>
 
@@ -637,34 +638,10 @@ function formatPointDateLike(date: string) {
   return date.endsWith("-01") ? formatMonth(date) : formatDay(date);
 }
 
-function formatMonth(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(new Date(`${date}T00:00:00.000Z`));
-}
-
-function formatDay(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC"
-  }).format(new Date(`${date}T00:00:00.000Z`));
-}
-
 function formatShortDate(date: string) {
   return new Intl.DateTimeFormat("en", {
     month: "short",
     year: "2-digit",
-    timeZone: "UTC"
-  }).format(new Date(`${date}T00:00:00.000Z`));
-}
-
-function formatYear(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    year: "numeric",
     timeZone: "UTC"
   }).format(new Date(`${date}T00:00:00.000Z`));
 }
@@ -690,17 +667,6 @@ function timeToDate(time: number) {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-function formatDateTime(date: string) {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short"
-  }).format(new Date(date));
 }
 
 function sourceLabel(sourceUrl: string) {

@@ -14,8 +14,7 @@ const nextConfig = {
           unoptimized: true
         },
         env: {
-          NEXT_PUBLIC_BASE_PATH: githubPagesBasePath,
-          NEXT_PUBLIC_STATIC_EXPORT: "true"
+          NEXT_PUBLIC_BASE_PATH: githubPagesBasePath
         }
       }
     : {})

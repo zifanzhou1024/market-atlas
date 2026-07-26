@@ -41,22 +41,15 @@ export type ShillerDataset = {
   fetchedAt: string;
 };
 
-const SHILLER_SOURCE_URLS = [
+export const SHILLER_SOURCE_URLS = [
   "https://img1.wsimg.com/blobby/go/e5e77e0b-59d1-44d9-ab25-4763ac982e53/downloads/7fd201b2-28ad-476c-bc67-7a2cab5304a3/ie_data.xls?ver=1775144929611",
   "http://www.econ.yale.edu/~shiller/data/ie_data.xls"
 ] as const;
 
-const FRED_SP500_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SP500";
-const NASDAQ_SPY_SOURCE_URL = "https://api.nasdaq.com/api/quote/SPY/historical?assetclass=etf";
-const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
-
-let cachedDataset: { expiresAt: number; data: ShillerDataset } | undefined;
+export const FRED_SP500_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=SP500";
+export const NASDAQ_SPY_SOURCE_URL = "https://api.nasdaq.com/api/quote/SPY/historical?assetclass=etf";
 
 export async function fetchShillerData(): Promise<ShillerDataset> {
-  if (cachedDataset && cachedDataset.expiresAt > Date.now()) {
-    return cachedDataset.data;
-  }
-
   let lastError: unknown;
 
   for (const sourceUrl of SHILLER_SOURCE_URLS) {
@@ -99,11 +92,6 @@ export async function fetchShillerData(): Promise<ShillerDataset> {
         dailySourceUrl: dailyPoints.length > 0 ? FRED_SP500_URL : null,
         ohlcSourceUrl: dailyPoints.some((point) => point.capeOhlc) ? NASDAQ_SPY_SOURCE_URL : null,
         fetchedAt: new Date().toISOString()
-      };
-
-      cachedDataset = {
-        expiresAt: Date.now() + CACHE_TTL_MS,
-        data
       };
 
       return data;

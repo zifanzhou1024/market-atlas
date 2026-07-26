@@ -1,18 +1,21 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { SpxWeekdayPayload } from "../../lib/spx-weekday-service";
+import { formatDateTime, formatDay } from "../../lib/format";
+import type { SourceStatus } from "../../lib/schemas/manifest";
 import type {
   SpxRange,
   SpxReturnMethod,
+  SpxWeekdayPayload,
   SpxWeekdayReturn,
   SpxWeekdayStat,
   WeekdayName
 } from "../../lib/spx-weekdays";
-import { isStaticExport, withBasePath } from "../../lib/paths";
+import { withBasePath } from "../../lib/paths";
 
 type SpxWeekdayDashboardProps = {
   initialDataset: SpxWeekdayPayload | null;
+  sourceStatus: SourceStatus | null;
   initialError?: string | null;
 };
 
@@ -76,23 +79,9 @@ const WEEKDAY_COLORS: Record<WeekdayName, string> = {
   Thursday: "#35845e",
   Friday: "#bd4b45"
 };
-const dateFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC"
-});
-const dateTimeFormatter = new Intl.DateTimeFormat("en", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  timeZoneName: "short"
-});
-
 export function SpxWeekdayDashboard({
   initialDataset,
+  sourceStatus,
   initialError = null
 }: SpxWeekdayDashboardProps) {
   const [dataset, setDataset] = useState<SpxWeekdayPayload | null>(initialDataset);
@@ -165,7 +154,7 @@ export function SpxWeekdayDashboard({
           <a href={withBasePath("/chart")}>CAPE chart</a>
           <a href={withBasePath("/buffett")}>Buffett indicator</a>
           <a href={withBasePath("/spx-weekdays")} aria-current="page">SPX weekdays</a>
-          <a href={withBasePath("/#about")}>Data sources</a>
+          <a href={withBasePath("/data")}>Data status</a>
         </nav>
       </header>
 
@@ -175,13 +164,13 @@ export function SpxWeekdayDashboard({
           <h1>SPX weekday performance</h1>
           <p>
             Compare S&P 500 weekday returns across intraday and close-to-close
-            methods using the local SPX market-data cache.
+            methods using the validated SPX dataset committed with this site.
           </p>
         </div>
         <div className="quoteStack">
           <span>{dataset ? `${RANGE_LABELS[dataset.range]} · ${METHOD_LABELS[dataset.method]}` : "Waiting for data"}</span>
           <strong>{leader ? formatPercent(leader.totalReturn) : "n/a"}</strong>
-          <em>{leader ? `${leader.weekday} cumulative return` : "No cached SPX rows"}</em>
+          <em>{leader ? `${leader.weekday} cumulative return` : "No committed SPX rows"}</em>
         </div>
       </section>
 
@@ -193,8 +182,8 @@ export function SpxWeekdayDashboard({
                 <p className="eyebrow">Weekday study</p>
                 <h2>{leader ? `${leader.weekday} leads this view` : "Awaiting observations"}</h2>
               </div>
-              <span className={`statusBadge ${dataset.warning || errorMessage ? "amber" : "green"}`}>
-                {isLoading ? "Updating" : dataset.warning || errorMessage ? "Needs review" : "Fresh view"}
+              <span className={`statusBadge ${sourceStatus?.status === "failed" ? "red" : sourceStatus?.status === "stale" || errorMessage ? "amber" : "green"}`}>
+                {isLoading ? "Updating" : sourceStatus?.status === "failed" ? "Failed" : sourceStatus?.status === "stale" || errorMessage ? "Needs review" : "Fresh view"}
               </span>
             </div>
 
@@ -248,7 +237,7 @@ export function SpxWeekdayDashboard({
             ))}
           </section>
 
-          <SourceNote dataset={dataset} fetchError={errorMessage} />
+          <SourceNote dataset={dataset} sourceStatus={sourceStatus} fetchError={errorMessage} />
         </>
       ) : (
         <section className="errorState panel" aria-labelledby="spx-weekday-error-title">
@@ -256,7 +245,7 @@ export function SpxWeekdayDashboard({
           <h1 id="spx-weekday-error-title">The weekday study could not be loaded.</h1>
           <p>
             {errorMessage ??
-              "The local SPX cache has no usable rows and the public source did not respond."}
+              "The committed SPX dataset has no usable rows. Check the data status page for details."}
           </p>
           <button
             className="retryButton"
@@ -266,7 +255,7 @@ export function SpxWeekdayDashboard({
           >
             {isLoading ? "Retrying" : "Retry default view"}
           </button>
-          <a href={getSpxWeekdayDataUrl("1y", "openClose")}>Check the data endpoint</a>
+          <a href={withBasePath("/data")}>View data status</a>
         </section>
       )}
     </main>
@@ -274,9 +263,7 @@ export function SpxWeekdayDashboard({
 }
 
 function getSpxWeekdayDataUrl(range: SpxRange, method: SpxReturnMethod): string {
-  return isStaticExport
-    ? withBasePath(`/data/spx-weekdays/${range}-${method}.json`)
-    : withBasePath(`/api/spx-weekdays?range=${range}&method=${method}`);
+  return withBasePath(`/data/spx-weekdays/${range}-${method}.json`);
 }
 
 function WeekdaySummaryChart({ stats }: { stats: SpxWeekdayStat[] }) {
@@ -572,26 +559,27 @@ function WeekdayStatCard({ stat }: { stat: SpxWeekdayStat }) {
 
 function SourceNote({
   dataset,
+  sourceStatus,
   fetchError
 }: {
   dataset: SpxWeekdayPayload;
+  sourceStatus: SourceStatus | null;
   fetchError: string | null;
 }) {
   return (
     <section className="sourceNote panel">
       <p className="eyebrow">Source freshness</p>
       <p>
-        Local cache covers {dataset.database.firstDate ? formatDay(dataset.database.firstDate) : "n/a"}
-        {" "}through {dataset.database.latestDate ? formatDay(dataset.database.latestDate) : "n/a"}
-        {" "}with {formatInteger(dataset.database.rowCount)} SPX daily rows.
+        This view covers {dataset.startDate ? formatDay(dataset.startDate) : "n/a"}
+        {" "}through {dataset.endDate ? formatDay(dataset.endDate) : "n/a"}.
+        {sourceStatus ? ` The source contains ${formatInteger(sourceStatus.rowCount)} SPX daily rows.` : ""}
       </p>
       <p className="sourceLine">
         Source fetched from <a href={dataset.source.url}>{dataset.source.displayName}</a>
-        {dataset.database.latestFetchedAt ? `; latest row fetched ${formatDateTime(dataset.database.latestFetchedAt)}` : ""}
-        {dataset.database.lastSuccessfulRefreshAt ? `; last refresh ${formatDateTime(dataset.database.lastSuccessfulRefreshAt)}` : ""}.
+        {sourceStatus?.lastSuccessfulFetchAt ? `; last successful refresh ${formatDateTime(sourceStatus.lastSuccessfulFetchAt)}` : ""}.
       </p>
-      {dataset.warning ? (
-        <p className="weekdayWarning">Warning: {dataset.warning}</p>
+      {sourceStatus?.errorMessage ? (
+        <p className="weekdayWarning">Source status: {sourceStatus.errorMessage}</p>
       ) : null}
       {fetchError ? (
         <p className="weekdayWarning">Update failed: {fetchError}</p>
@@ -757,14 +745,6 @@ function yForValue(
 
 function dateToTime(date: string) {
   return new Date(`${date}T00:00:00.000Z`).getTime();
-}
-
-function formatDay(date: string) {
-  return dateFormatter.format(new Date(`${date}T00:00:00.000Z`));
-}
-
-function formatDateTime(date: string) {
-  return dateTimeFormatter.format(new Date(date));
 }
 
 function formatTickDate(date: string, startDate: string, endDate: string) {

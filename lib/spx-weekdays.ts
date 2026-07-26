@@ -36,6 +36,16 @@ export type SpxWeekdayDataset = {
   }>;
 };
 
+export type SpxWeekdayPayload = SpxWeekdayDataset & {
+  source: {
+    key: string;
+    name: string;
+    displayName: string;
+    provider: string;
+    url: string;
+  };
+};
+
 type RawSpxWeekdayReturn = {
   date: string;
   weekday: WeekdayName;
