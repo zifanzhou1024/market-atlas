@@ -292,6 +292,22 @@ input {
   filter: drop-shadow(0 3px 5px rgb(66 103 198 / 15%));
 }
 
+.forwardPeLine {
+  stroke: var(--gold);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 3px 5px rgb(187 138 56 / 15%));
+}
+
+.spxPriceLine {
+  stroke: var(--blue);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.76;
+}
+
 .averageLine {
   stroke: var(--panel-strong);
   stroke-dasharray: 8 8;
@@ -669,6 +685,22 @@ input {
   height: 3px;
   border-radius: 999px;
   background: var(--teal);
+}
+
+.legendItem.forwardPe::before {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--gold);
+}
+
+.legendItem.price::before {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--blue);
+}
+
+.rightAxisLabel {
+  fill: var(--blue);
 }
 
 .largeChart {
