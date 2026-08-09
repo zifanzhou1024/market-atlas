@@ -14,6 +14,8 @@ export const metadata = {
 const sourceOrder = ["shiller", "buffett", "spxWeekdays"] as const;
 const ranges = ["1m", "3m", "6m", "ytd", "1y", "2y", "5y", "10y", "all"];
 const methods = ["openClose", "closeClose"];
+const workflowHistoryUrl =
+  "https://github.com/zifanzhou1024/market-atlas/actions/workflows/deploy-pages.yml";
 
 export default async function DataPage() {
   const manifest = ManifestSchema.parse(await loadDataManifest());
@@ -69,6 +71,56 @@ export default async function DataPage() {
           ) : (
             <strong>Local generation</strong>
           )}
+        </div>
+      </section>
+
+      <section className="panel refreshOperations" aria-labelledby="refresh-operations-title">
+        <div className="refreshLead">
+          <p className="eyebrow">Refresh operations</p>
+          <h2 id="refresh-operations-title">Validated after the U.S. close</h2>
+          <p>
+            On weekdays, GitHub Actions starts a refresh at 7:30 p.m.
+            America/Chicago. Two UTC schedules cover daylight-saving changes;
+            an offset guard selects the correct run, so a second successful
+            no-op run is expected.
+          </p>
+        </div>
+
+        <ol className="refreshSteps" aria-label="Refresh pipeline">
+          <li>
+            <span>01</span>
+            <div>
+              <strong>Fetch</strong>
+              <p>Pull public market observations from each upstream source.</p>
+            </div>
+          </li>
+          <li>
+            <span>02</span>
+            <div>
+              <strong>Validate</strong>
+              <p>Apply schema checks and L3 market-data sanity bounds.</p>
+            </div>
+          </li>
+          <li>
+            <span>03</span>
+            <div>
+              <strong>Verify</strong>
+              <p>Run unit tests, static export, and route smoke checks.</p>
+            </div>
+          </li>
+          <li>
+            <span>04</span>
+            <div>
+              <strong>Publish</strong>
+              <p>Commit validated snapshots, then deploy the same artifact.</p>
+            </div>
+          </li>
+        </ol>
+
+        <div className="refreshAutomation">
+          <span>Automation contract</span>
+          <strong>Data push failures stop the workflow.</strong>
+          <a href={workflowHistoryUrl}>View workflow history</a>
         </div>
       </section>
 

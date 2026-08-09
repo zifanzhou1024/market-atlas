@@ -36,6 +36,24 @@ npm run test:static
 - The deployed GitHub Pages site contains static HTML, CSS, JavaScript, and JSON only. It has no runtime API or database.
 - Scheduled GitHub Actions runs regenerate, test, smoke-check, deploy, and auto-commit validated data updates to `main`.
 
+## Refresh operations
+
+- Scheduled refreshes target 7:30 p.m. America/Chicago on weekdays after the U.S. market close.
+- Two UTC cron entries cover daylight-saving time; a timezone guard runs only the matching schedule. The other scheduled run exits successfully without building.
+- Validated data is committed with `[skip ci]` before the verified artifact is deployed.
+- A failed data push fails the workflow instead of reporting a successful update that did not reach `main`.
+
+## Delivery roadmap
+
+1. Static-export foundation: complete.
+2. Chart-layer replacement: next; scope the chart library and migration in a separate design and implementation plan.
+3. Information architecture and home-page redesign.
+4. Interaction polish, including URL state, keyboard controls, and downloads.
+5. Deeper SPX weekday statistics and distribution analysis.
+6. Maintainability and CI improvements, including CSS modularization and browser-quality checks.
+
+Each roadmap item is intentionally handled as its own sub-project so infrastructure, visualization, and interaction changes remain reviewable.
+
 ## Data sources
 
 | Dataset | Sources |
